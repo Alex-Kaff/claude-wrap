@@ -1,0 +1,60 @@
+
+> claude-wrap@0.0.2 inject C:\Work\personal\claude-wrap
+> node dist/inject.js "snapshot"
+
+ ▐▛███▜▌   Claude Code v2.1.96
+▝▜█████▛▘  Opus 4.6 (1M context) with medium effort · Claude Max
+  ▘▘ ▝▝    C:\Work\personal\claude-wrap
+
+❯ make a dir test, and start using your tools there to test, create files, edit, read, web search, run commands etc.    
+                                                                                                            
+● Bash(mkdir -p /c/Work/personal/claude-wrap/test && ls /c/Work/personal/claude-wrap/test)
+  ⎿  (No output)                                                                                            
+                                                                                                            
+● Write(C:\Work\personal\claude-wrap\test\hello.py)
+  ⎿  Wrote 5 lines to C:\Work\personal\claude-wrap\test\hello.py
+      1 def greet(name):                                                                                    
+      2     return f"Hello, {name}!"                                                                        
+      3                                                                                                     
+      4 if __name__ == "__main__":                                                                          
+      5     print(greet("world"))                                                                           
+  ⎿  Error: InputValidationError: Edit failed due to the following issues:
+     The required parameter `old_string` is missing
+     An unexpected parameter `old_str` was provided
+
+● Read(C:\Work\personal\claude-wrap\test\hello.py)
+  ⎿  Read 6 lines
+                                                                                                            
+● Bash(cd /c/Work/personal/claude-wrap/test && python hello.py)                                             
+  ⎿  Hello, world!                                                                                          
+                                                                                                            
+● Web Search("claude opus 4.6 release")
+  ⎿  Did 1 search in 8s                                                                                     
+
+● Update(C:\Work\personal\claude-wrap\test\hello.py)                                                        
+  ⎿  Added 1 line, removed 1 line
+      2      return f"Hello, {name}!"
+      3  
+      4  if __name__ == "__main__":
+      5 -    print(greet("world"))                                                                                      
+      5 +    print(greet("Cobble"))                                                                                     
+
+● Bash(python hello.py)
+  ⎿  Hello, Cobble! 
+
+● All tools working: created test/hello.py, edited, read, ran it (Hello, Cobble!), and web-searched.
+
+  Web search result: Claude Opus 4.6 released 2026-02-05 — 1M context, adaptive thinking, agent teams, $5/$25 per Mtok. 
+
+  Sources:
+  - https://www.anthropic.com/news/claude-opus-4-6
+  - https://platform.claude.com/docs/en/about-claude/models/whats-new-claude-4-6
+
+✻ Crunched for 47s
+                                                                                                               \^^^/    
+                                                                                                               .----.   
+───────────────────────────────────────────────────────────────────────────────────────────────────────────   ( ◉  ◉ )  
+❯                                                                                                             (______)  
+───────────────────────────────────────────────────────────────────────────────────────────────────────────   /\/\/\/\  
+  ⏵⏵ accept edits on (shift+tab to cycle)                26188 tokens                                          Cobble   
+

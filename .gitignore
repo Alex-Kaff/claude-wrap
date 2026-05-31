@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+tsconfig.tsbuildinfo
+
+# Logs & runtime artifacts
+*.log
+*.wav
+
+# Packed tarballs
+*.tgz
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.stackdump
