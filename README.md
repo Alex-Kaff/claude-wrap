@@ -1,5 +1,11 @@
 # claude-wrap
 
+[![npm version](https://img.shields.io/npm/v/claude-wrap.svg)](https://www.npmjs.com/package/claude-wrap)
+[![npm downloads](https://img.shields.io/npm/dm/claude-wrap.svg)](https://www.npmjs.com/package/claude-wrap)
+[![types](https://img.shields.io/npm/types/claude-wrap.svg)](https://www.npmjs.com/package/claude-wrap)
+[![node](https://img.shields.io/node/v/claude-wrap.svg)](https://nodejs.org)
+[![license](https://img.shields.io/npm/l/claude-wrap.svg)](./LICENSE)
+
 A client library for wrapping the **Claude Code** CLI window. Spawn `claude`
 headless (in an in-process PTY) or open a visible terminal window, mirror its
 output into a virtual screen, read parsed session state, subscribe to status
