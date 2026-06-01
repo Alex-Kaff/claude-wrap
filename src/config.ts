@@ -16,7 +16,6 @@ function envNum(name: string, fallback: number): number {
   // Accept zero — tests or power users may want to disable a delay or
   // a scrollback budget entirely. Reject NaN and negatives only.
   if (!Number.isFinite(n) || n < 0) {
-    // eslint-disable-next-line no-console
     console.warn(`[config] ignoring invalid ${name}=${raw}, using fallback ${fallback}`);
     return fallback;
   }
@@ -44,6 +43,15 @@ export const PARSE_DEBOUNCE_MS = envNum("CLAUDE_WRAP_PARSE_DEBOUNCE_MS", 50);
 
 /** Max time ask() waits for Claude to become busy before proceeding. */
 export const ASK_SETTLE_TIMEOUT_MS = envNum("CLAUDE_WRAP_ASK_SETTLE_TIMEOUT_MS", 5_000);
+
+/**
+ * Delay between typing prompt/menu text and pressing Enter. Claude Code's TUI
+ * commits typed input asynchronously; sending the text and the Enter as one
+ * write (or back-to-back with no gap) lets Enter fire before the text is
+ * committed, so the prompt is typed but never submitted. A short gap, with
+ * the Enter as a separate write, makes submission reliable.
+ */
+export const SUBMIT_DELAY_MS = envNum("CLAUDE_WRAP_SUBMIT_DELAY_MS", 90);
 
 // ---------------------------------------------------------------------------
 // Virtual screen

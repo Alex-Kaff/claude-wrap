@@ -44,7 +44,11 @@ function main(): void {
   }
   // Clean up prompt temp files
   for (const pf of promptFiles) {
-    try { fs.unlinkSync(pf); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(pf);
+    } catch {
+      /* ignore */
+    }
   }
 
   // Pipe name resolution:
@@ -142,8 +146,16 @@ function main(): void {
       // If the child died before both transports came up, don't
       // register a ghost entry that points at a closed pipe.
       if (cleaned) {
-        try { control.close(); } catch { /* ignore */ }
-        try { httpBridge.close(); } catch { /* ignore */ }
+        try {
+          control.close();
+        } catch {
+          /* ignore */
+        }
+        try {
+          httpBridge.close();
+        } catch {
+          /* ignore */
+        }
         return;
       }
       const base = {
@@ -166,10 +178,20 @@ function main(): void {
       // successful half so we don't leave a half-functional instance
       // with no registry entry for clients to discover.
       log("[control] listen failed", err);
-      pipeListen.then(() => control.close(), () => {});
-      httpListen.then(() => httpBridge.close(), () => {});
+      pipeListen.then(
+        () => control.close(),
+        () => {},
+      );
+      httpListen.then(
+        () => httpBridge.close(),
+        () => {},
+      );
       process.exitCode = 1;
-      try { child.kill(); } catch { /* ignore */ }
+      try {
+        child.kill();
+      } catch {
+        /* ignore */
+      }
     },
   );
 
@@ -191,8 +213,16 @@ function main(): void {
   process.stdout.on("resize", () => {
     cols = process.stdout.columns ?? cols;
     rows = process.stdout.rows ?? rows;
-    try { child.resize(cols, rows); } catch { /* ignore */ }
-    try { screen.resize(cols, rows); } catch { /* ignore */ }
+    try {
+      child.resize(cols, rows);
+    } catch {
+      /* ignore */
+    }
+    try {
+      screen.resize(cols, rows);
+    } catch {
+      /* ignore */
+    }
   });
 
   // Lifecycle (`cleaned` is declared above so the Promise.all success
@@ -200,14 +230,33 @@ function main(): void {
   function cleanup(): void {
     if (cleaned) return;
     cleaned = true;
-    try { if (process.stdin.isTTY) process.stdin.setRawMode(false); } catch { /* ignore */ }
+    try {
+      if (process.stdin.isTTY) process.stdin.setRawMode(false);
+    } catch {
+      /* ignore */
+    }
     parser.flush();
     parser.dispose();
-    if (sink) { sink.close(); sink = null; }
+    if (sink) {
+      sink.close();
+      sink = null;
+    }
     control.close();
-    try { httpBridge.close(); } catch { /* ignore */ }
-    try { unregisterInstance(pipeName); } catch { /* ignore */ }
-    try { child.kill(); } catch { /* ignore */ }
+    try {
+      httpBridge.close();
+    } catch {
+      /* ignore */
+    }
+    try {
+      unregisterInstance(pipeName);
+    } catch {
+      /* ignore */
+    }
+    try {
+      child.kill();
+    } catch {
+      /* ignore */
+    }
   }
 
   child.onExit(({ exitCode }) => {
@@ -216,8 +265,14 @@ function main(): void {
     process.exit(exitCode ?? 0);
   });
   process.on("exit", cleanup);
-  process.on("SIGINT", () => { cleanup(); process.exit(0); });
-  process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+  process.on("SIGINT", () => {
+    cleanup();
+    process.exit(0);
+  });
+  process.on("SIGTERM", () => {
+    cleanup();
+    process.exit(0);
+  });
 }
 
 main();

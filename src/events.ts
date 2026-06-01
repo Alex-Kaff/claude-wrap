@@ -1,9 +1,6 @@
 // Typed event emitter and session event definitions for claude-wrap.
 
-import type {
-  PermissionPrompt,
-  TodoList,
-} from "./parse";
+import type { PermissionPrompt, TodoList } from "./parse";
 import type { SessionState } from "./session-state";
 
 // ---------------------------------------------------------------------------
@@ -136,7 +133,10 @@ export function createEmitter<T>(): TypedEmitter<T> {
       });
     }) as CancellablePromise<T[K]>;
     promise.cancel = () => {
-      if (unsub) { unsub(); unsub = null; }
+      if (unsub) {
+        unsub();
+        unsub = null;
+      }
     };
     return promise;
   }

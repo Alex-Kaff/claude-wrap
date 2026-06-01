@@ -1,6 +1,6 @@
 {
   "name": "claude-wrap",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Client library for wrapping the Claude Code CLI window: spawn it headless or in a visible terminal, read screen/parsed state, subscribe to status events, send input, and control out-of-process instances over a pipe or loopback HTTP.",
   "license": "MIT",
   "author": "Alex Kaffetzakis <alex@kaffetzakis.com>",
@@ -47,18 +47,26 @@
     "wrap": "node dist/wrapper.js",
     "inject": "node dist/inject.js",
     "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "lint": "eslint .",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.mjs\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.mjs\"",
     "prepublishOnly": "npm run clean && npm run build && npm test",
     "test": "tsc && node --test test/parse.test.mjs test/wait.test.mjs test/client.test.mjs test/session-state.test.mjs test/screen.test.mjs"
   },
   "dependencies": {
     "@xterm/headless": "^5.5.0",
     "node-pty": "^1.0.0",
-    "ws": "^8.15.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@types/node": "^20.12.0",
     "@types/ws": "^8.5.8",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.2.0",
     "rimraf": "^5.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "typescript-eslint": "^8.0.0"
   }
 }

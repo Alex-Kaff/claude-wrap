@@ -6,6 +6,9 @@
 // omit `version` (treated as latest-compatible), but responses
 // always carry it so clients can detect mismatches.
 
+import * as os from "os";
+import * as path from "path";
+
 export const PROTOCOL_VERSION = 1;
 
 export interface VersionField {
@@ -67,11 +70,7 @@ export interface ErrorResponse {
   code?: string;
 }
 
-export type Response =
-  | WriteResponse
-  | SnapshotResponse
-  | ResizeResponse
-  | ErrorResponse;
+export type Response = WriteResponse | SnapshotResponse | ResizeResponse | ErrorResponse;
 
 export const DEFAULT_PIPE_NAME = "claude-wrap";
 
@@ -82,9 +81,5 @@ export const DEFAULT_PIPE_NAME = "claude-wrap";
  */
 export const pipePath = (name: string): string => {
   if (process.platform === "win32") return `\\\\.\\pipe\\${name}`;
-  // Lazy require to keep the Windows path trivially inspectable.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const os = require("os") as typeof import("os");
-  const path = require("path") as typeof import("path");
   return path.join(os.tmpdir(), `${name}.sock`);
 };

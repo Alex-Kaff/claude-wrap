@@ -1,0 +1,14 @@
+# Captured status-bar lines from Claude Code v2.1.159 (one per mode).
+# These are the BOTTOM status bar. Idle shows "· ← for agents"; busy shows "· esc to interrupt".
+# Normal/default mode has NO mode phrase — it shows "? for shortcuts".
+#
+# auto (idle):
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                                         0 tokens
+# auto (busy):
+  ⏵⏵ auto mode on (shift+tab to cycle) · esc to interrupt                                                 27656 tokens
+# normal/default (idle):
+  ? for shortcuts · ← for agents                                                                          27864 tokens
+# accept edits (idle):
+  ⏵⏵ accept edits on (shift+tab to cycle) · ← for agents                                                  27864 tokens
+# plan (idle):
+  ⏸ plan mode on (shift+tab to cycle) · ← for agents                                                      27864 tokens

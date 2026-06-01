@@ -48,9 +48,7 @@ export async function waitIdle(src: SnapshotSource, opts: WaitOptions = {}): Pro
       const promptIsEmpty = lastPrompt !== undefined && lastPrompt.text === "";
       if (!status.busy && (perm || promptIsEmpty)) return;
       if (Date.now() >= deadline) {
-        throw new TimeoutError(
-          `waitIdle: timed out after ${timeoutMs}ms (busy=${status.busy})`,
-        );
+        throw new TimeoutError(`waitIdle: timed out after ${timeoutMs}ms (busy=${status.busy})`);
       }
       await sleep(interval);
     }
@@ -80,9 +78,7 @@ export async function waitFor(
         if (pattern.test(line)) return line;
       }
       if (Date.now() >= deadline) {
-        throw new TimeoutError(
-          `waitFor: timed out after ${timeoutMs}ms waiting for ${pattern}`,
-        );
+        throw new TimeoutError(`waitFor: timed out after ${timeoutMs}ms waiting for ${pattern}`);
       }
       await sleep(interval);
     }

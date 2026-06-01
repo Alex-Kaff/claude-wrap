@@ -27,7 +27,7 @@ class FakeScreen {
     // Simulate xterm write callback — fire listeners synchronously
     for (const cb of this.listeners) cb();
   }
-  snapshot(viewportOnly, clean) {
+  snapshot(_viewportOnly, _clean) {
     return {
       cols: this._cols,
       rows: this._rows,
@@ -70,15 +70,16 @@ test("emptyState has correct defaults", () => {
   assert.equal(s.todoList, null);
 });
 
-test("ContinuousParser emits status:busy when spinner appears", async () => {
+test("ContinuousParser emits status:busy when 'esc to interrupt' appears", async () => {
   const screen = new FakeScreen();
   const emitter = createEmitter();
   const parser = new ContinuousParser(screen, emitter, "test-1", 10);
   const busyEvents = collectEvents(emitter, "status:busy");
 
+  // Busy is keyed off the bottom bar's "esc to interrupt" hint (v2.1.159+).
   screen.setLines([
-    "✢ Working...",
-    "  ⏵⏵ accept edits on · 100 tokens",
+    "● Bash(echo hi)",
+    "  ⏵⏵ accept edits on (shift+tab to cycle) · esc to interrupt   100 tokens",
   ]);
 
   await tick(30);
@@ -88,27 +89,24 @@ test("ContinuousParser emits status:busy when spinner appears", async () => {
   parser.dispose();
 });
 
-test("ContinuousParser emits status:idle when spinner clears", async () => {
+test("ContinuousParser emits status:idle when 'esc to interrupt' clears", async () => {
   const screen = new FakeScreen();
   const emitter = createEmitter();
   // Short idle-cooldown (20ms) so the test is deterministic; the cooldown
   // self-schedules a reparse, so idle fires ~debounce+cooldown after the
-  // spinner clears even though the screen is static afterward.
+  // busy hint clears even though the screen is static afterward.
   const parser = new ContinuousParser(screen, emitter, "test-2", 10, 20);
   const idleEvents = collectEvents(emitter, "status:idle");
 
-  // First: busy
+  // First: busy (bar shows "esc to interrupt")
   screen.setLines([
-    "✢ Working...",
-    "  ⏵⏵ accept edits on · 100 tokens",
+    "● Bash(echo hi)",
+    "  ⏵⏵ accept edits on (shift+tab to cycle) · esc to interrupt   100 tokens",
   ]);
   await tick(30);
 
-  // Then: idle
-  screen.setLines([
-    "❯ ",
-    "  ⏵⏵ accept edits on · 200 tokens",
-  ]);
+  // Then: idle (bar shows "← for agents" instead)
+  screen.setLines(["❯ ", "  ⏵⏵ accept edits on (shift+tab to cycle) · ← for agents   200 tokens"]);
   await tick(80); // > debounce(10) + cooldown(20), with margin
 
   assert.equal(idleEvents.length, 1);
@@ -142,11 +140,7 @@ test("ContinuousParser emits tool:complete when result appears", async () => {
   const completed = collectEvents(emitter, "tool:complete");
 
   // Tool with no result
-  screen.setLines([
-    "❯ do stuff",
-    "● Bash(ls)",
-    "  ⏵⏵ accept edits on · 100 tokens",
-  ]);
+  screen.setLines(["❯ do stuff", "● Bash(ls)", "  ⏵⏵ accept edits on · 100 tokens"]);
   await tick(30);
 
   // Tool with result
@@ -217,10 +211,7 @@ test("ContinuousParser emits permission:prompt and permission:resolved", async (
   assert.equal(prompts[0].prompt.options.length, 2);
 
   // Permission resolved
-  screen.setLines([
-    "❯ ",
-    "  ⏵⏵ accept edits on · 200 tokens",
-  ]);
+  screen.setLines(["❯ ", "  ⏵⏵ accept edits on · 200 tokens"]);
   await tick(30);
 
   assert.equal(resolved.length, 1);
@@ -233,10 +224,7 @@ test("ContinuousParser emits prompt:user for new user prompts", async () => {
   const parser = new ContinuousParser(screen, emitter, "test-7", 10);
   const userPrompts = collectEvents(emitter, "prompt:user");
 
-  screen.setLines([
-    "❯ first prompt",
-    "  ⏵⏵ accept edits on · 100 tokens",
-  ]);
+  screen.setLines(["❯ first prompt", "  ⏵⏵ accept edits on · 100 tokens"]);
   await tick(30);
   assert.equal(userPrompts.length, 1);
   assert.equal(userPrompts[0].text, "first prompt");
@@ -296,10 +284,7 @@ test("ContinuousParser trailing-edge debounce coalesces rapid writes", async () 
 
   // Rapid-fire 5 writes within debounce window
   for (let i = 0; i < 5; i++) {
-    screen.setLines([
-      `❯ prompt ${i}`,
-      "  ⏵⏵ accept edits on · 100 tokens",
-    ]);
+    screen.setLines([`❯ prompt ${i}`, "  ⏵⏵ accept edits on · 100 tokens"]);
   }
 
   // Should NOT have fired yet (debounce pending)
@@ -335,8 +320,8 @@ test("flush() triggers immediate reparse", () => {
   // Set lines directly (not via setLines) to avoid triggering onChange,
   // so we can test that flush() parses independently of the debounce cycle.
   screen._lines = [
-    "✢ Working...",
-    "  ⏵⏵ accept edits on · 100 tokens",
+    "● Bash(echo hi)",
+    "  ⏵⏵ accept edits on (shift+tab to cycle) · esc to interrupt   100 tokens",
   ];
 
   parser.flush();
@@ -403,10 +388,7 @@ test("todo:changed emitted when todo list disappears", async () => {
   assert.ok(todoEvents[0].todoList !== null);
 
   // Todo disappears from screen
-  screen.setLines([
-    "❯ ",
-    "  ⏵⏵ accept edits on · 200 tokens",
-  ]);
+  screen.setLines(["❯ ", "  ⏵⏵ accept edits on · 200 tokens"]);
   await tick(30);
 
   assert.equal(todoEvents.length, 2);
@@ -419,10 +401,7 @@ test("lastActivity only updates on actual changes", async () => {
   const emitter = createEmitter();
   const parser = new ContinuousParser(screen, emitter, "test-activity", 10);
 
-  const lines = [
-    "❯ hello",
-    "  ⏵⏵ accept edits on · 100 tokens",
-  ];
+  const lines = ["❯ hello", "  ⏵⏵ accept edits on · 100 tokens"];
 
   screen.setLines(lines);
   await tick(30);
@@ -443,21 +422,14 @@ test("lastActivity updates when state actually changes", async () => {
   const emitter = createEmitter();
   const parser = new ContinuousParser(screen, emitter, "test-activity-pos", 10);
 
-  screen.setLines([
-    "❯ hello",
-    "  ⏵⏵ accept edits on · 100 tokens",
-  ]);
+  screen.setLines(["❯ hello", "  ⏵⏵ accept edits on · 100 tokens"]);
   await tick(30);
   const firstActivity = parser.current.lastActivity;
 
   await tick(50);
 
   // Different state — lastActivity SHOULD update
-  screen.setLines([
-    "❯ hello",
-    "● Bash(ls)",
-    "  ⏵⏵ accept edits on · 200 tokens",
-  ]);
+  screen.setLines(["❯ hello", "● Bash(ls)", "  ⏵⏵ accept edits on · 200 tokens"]);
   await tick(30);
 
   assert.notEqual(parser.current.lastActivity, firstActivity);
@@ -471,7 +443,9 @@ test("once() cancel prevents subscription leak", () => {
   p.cancel();
   // Emit after cancel — should not resolve
   let resolved = false;
-  p.then(() => { resolved = true; });
+  p.then(() => {
+    resolved = true;
+  });
   emitter.emit("status:busy", { instance: "x" });
   // Synchronous check — handler was removed, promise never resolves
   assert.equal(resolved, false);
@@ -483,10 +457,7 @@ test("state:changed not emitted when nothing changes", async () => {
   const parser = new ContinuousParser(screen, emitter, "test-12", 10);
   const changes = collectEvents(emitter, "state:changed");
 
-  const lines = [
-    "❯ ",
-    "  ⏵⏵ accept edits on · 100 tokens",
-  ];
+  const lines = ["❯ ", "  ⏵⏵ accept edits on · 100 tokens"];
 
   screen.setLines(lines);
   await tick(30);

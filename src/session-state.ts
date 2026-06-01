@@ -11,6 +11,7 @@ import {
   parseToolCalls,
   parsePermissionPrompt,
   parseTodoList,
+  parseRemoteUrl,
   type ToolCall,
   type UserPrompt,
   type PermissionPrompt,
@@ -23,21 +24,24 @@ import { PARSE_DEBOUNCE_MS } from "./config";
 // ---------------------------------------------------------------------------
 
 export interface SessionState {
-  status: { mode: string | null; busy: boolean; tokens: number | null };
+  status: { mode: string | null; busy: boolean; tokens: number | null; effort: string | null };
   toolCalls: ToolCall[];
   permissionPrompt: PermissionPrompt | null;
   userPrompts: UserPrompt[];
   todoList: TodoList | null;
+  /** Remote-control session URL when /remote-control is active, else null. */
+  remoteUrl: string | null;
   lastActivity: Date;
 }
 
 export function emptyState(): SessionState {
   return {
-    status: { mode: null, busy: false, tokens: null },
+    status: { mode: null, busy: false, tokens: null, effort: null },
     toolCalls: [],
     permissionPrompt: null,
     userPrompts: [],
     todoList: null,
+    remoteUrl: null,
     lastActivity: new Date(),
   };
 }
@@ -124,12 +128,6 @@ export class ContinuousParser {
    *  so a missed idle transition can't stick forever. */
   private safetyInterval: ReturnType<typeof setInterval> | null = null;
   private static SAFETY_REPARSE_MS = 3_000;
-  /** Track spinner line content to detect stale spinners.
-   *  An active spinner changes every frame (glyph animates, timer ticks).
-   *  If the spinner line is identical across consecutive parses, it's stale. */
-  private lastSpinnerLine: string | undefined;
-  private spinnerStaleCount = 0;
-  private static SPINNER_STALE_THRESHOLD = 4;
   /** Busy cooldown: when the spinner disappears, hold "busy" for a short
    *  window before reporting idle. Between tool calls the spinner briefly
    *  vanishes before reappearing; the cooldown absorbs those gaps so a
@@ -163,7 +161,9 @@ export class ContinuousParser {
   }
 
   /** Current state -- always safe to read, never stale by more than debounceMs. */
-  get current(): Readonly<SessionState> { return this.state; }
+  get current(): Readonly<SessionState> {
+    return this.state;
+  }
 
   /** Force an immediate reparse (e.g. after resize). */
   flush(): void {
@@ -230,40 +230,29 @@ export class ContinuousParser {
     const permissionPrompt = parsePermissionPrompt(lines);
     const userPrompts = parseUserPrompts(lines);
     const todoList = parseTodoList(lines);
+    const remoteUrl = parseRemoteUrl(lines);
 
-    // Stale spinner detection: an active spinner changes every parse cycle
-    // (glyph animates, timer ticks up). If the spinner line is identical
-    // across consecutive parses, it's a stale completion message.
     let effectiveBusy = status.busy;
-    if (status.busy && status.spinnerLine) {
-      if (status.spinnerLine === this.lastSpinnerLine) {
-        this.spinnerStaleCount++;
-        if (this.spinnerStaleCount >= ContinuousParser.SPINNER_STALE_THRESHOLD) {
-          effectiveBusy = false; // spinner hasn't changed — it's stale
-        }
-      } else {
-        this.spinnerStaleCount = 0;
-      }
-      this.lastSpinnerLine = status.spinnerLine;
-    } else {
-      this.lastSpinnerLine = undefined;
-      this.spinnerStaleCount = 0;
-    }
 
-    // Busy cooldown: between tool calls the spinner briefly vanishes while
-    // the screen redraws. Hold "busy" for idleCooldownMs after the spinner
-    // clears, so momentary gaps don't flap busy→idle→busy.
-    if (effectiveBusy) {
+    // A pending permission prompt means Claude is waiting on the user, not
+    // working — report idle immediately so the prompt surfaces without delay.
+    if (permissionPrompt) {
+      effectiveBusy = false;
+      this.idleSince = null;
+    } else if (effectiveBusy) {
       this.idleSince = null;
     } else if (this.state.status.busy) {
-      // Was busy, now parse says not busy — start (or continue) the cooldown.
+      // Busy cooldown: between tool calls the "esc to interrupt" hint can
+      // briefly vanish while the screen redraws. Hold "busy" for
+      // idleCooldownMs after it clears so momentary gaps don't flap
+      // busy→idle→busy. Wall-clock based with a self-scheduled reparse.
       const now = Date.now();
       if (this.idleSince === null) this.idleSince = now;
       if (now - this.idleSince < this.idleCooldownMs) {
-        effectiveBusy = true; // hold busy during the cooldown window
+        effectiveBusy = true;
         this.scheduleCooldownReparse();
       } else {
-        this.idleSince = null; // cooldown elapsed — allow the idle transition
+        this.idleSince = null;
       }
     }
 
@@ -272,11 +261,13 @@ export class ContinuousParser {
         mode: status.mode,
         busy: effectiveBusy,
         tokens: status.tokens,
+        effort: status.effort,
       },
       toolCalls,
       permissionPrompt,
       userPrompts,
       todoList,
+      remoteUrl,
       // Carried forward; updated to now only when diffAndEmit detects a change.
       lastActivity: prevActivity,
     };

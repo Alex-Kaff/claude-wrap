@@ -139,7 +139,11 @@ export class Client implements IClient {
           this.pending.splice(idx, 1);
           reject(new PipeError(err.message));
         }
-        try { sock.destroy(err); } catch { /* ignore */ }
+        try {
+          sock.destroy(err);
+        } catch {
+          /* ignore */
+        }
       });
     });
   }
@@ -169,7 +173,11 @@ export class Client implements IClient {
     const sock = this.sock;
     this.sock = null;
     this.connected = false;
-    try { sock?.end(); } catch { /* ignore */ }
+    try {
+      sock?.end();
+    } catch {
+      /* ignore */
+    }
   }
 }
 

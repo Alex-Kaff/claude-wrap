@@ -21,7 +21,9 @@ class ScriptedClient extends Client {
   async send() {
     return this._response;
   }
-  close() { /* no socket to close */ }
+  close() {
+    /* no socket to close */
+  }
 }
 
 function snap(extra = {}) {

@@ -1,0 +1,15 @@
+● Bash(mkdir subdir_test)
+  ⎿  Waiting…
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   mkdir subdir_test
+   Create directory subdir_test
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to claude-wrap-debug\ from this project
+   3. No
+
+ Esc to cancel · Tab to amend · ctrl+e to explain

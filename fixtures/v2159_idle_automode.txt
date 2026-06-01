@@ -1,0 +1,22 @@
+╭─── Claude Code v2.1.159 ─────────────────────────────────────────────────────────────────────────────────────────────╮
+│                                                    │ Tips for getting started                                        │
+│                 Welcome back Alex!                 │ Ask Claude to create a new app or clone a repository            │
+│                                                    │ ─────────────────────────────────────────────────────────────── │
+│                       ▐▛███▜▌                      │ What's new                                                      │
+│                      ▝▜█████▛▘                     │ Internal infrastructure improvements (no user-facing changes)   │
+│                        ▘▘ ▝▝                       │ Auto mode is now available on Bedrock, Vertex, and Foundry for… │
+│   Opus 4.8 (1M context) with xh… · Claude Max ·    │ Plugins in `.claude/skills` directories are now automatically … │
+│   alex@kaffetzakis.com's Organization              │ /release-notes for more                                         │
+│       ~\AppData\Local\Temp\claude-wrap-debug       │                                                                 │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+
+  /remote-control is active · Continue here, on your phone, or at
+  https://claude.ai/code/session_01YH1qTfLL3PqE7BMsvreJwY
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents                                                         0 tokens
+                                                                                                     ◉ xhigh · /effort

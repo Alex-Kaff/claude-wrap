@@ -37,11 +37,19 @@ function rotateIfNeeded(): void {
   }
   try {
     const oldest = `${LOG_PATH}.${LOG_ROTATE_KEEP}`;
-    try { fs.unlinkSync(oldest); } catch { /* ignore */ }
+    try {
+      fs.unlinkSync(oldest);
+    } catch {
+      /* ignore */
+    }
     for (let i = LOG_ROTATE_KEEP - 1; i >= 1; i--) {
       const from = `${LOG_PATH}.${i}`;
       const to = `${LOG_PATH}.${i + 1}`;
-      try { fs.renameSync(from, to); } catch { /* ignore missing */ }
+      try {
+        fs.renameSync(from, to);
+      } catch {
+        /* ignore missing */
+      }
     }
     fs.renameSync(LOG_PATH, `${LOG_PATH}.1`);
   } catch {

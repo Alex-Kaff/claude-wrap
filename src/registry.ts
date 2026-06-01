@@ -50,17 +50,29 @@ function acquireLock(): number | null {
           fs.unlinkSync(LOCK_PATH);
           continue;
         }
-      } catch { /* ignore — another process probably already released */ }
+      } catch {
+        /* ignore — another process probably already released */
+      }
       const waitUntil = Date.now() + LOCK_RETRY_MS;
-      while (Date.now() < waitUntil) { /* busy wait — locks are short */ }
+      while (Date.now() < waitUntil) {
+        /* busy wait — locks are short */
+      }
     }
   }
   return null;
 }
 
 function releaseLock(fd: number): void {
-  try { fs.closeSync(fd); } catch { /* ignore */ }
-  try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
+  try {
+    fs.closeSync(fd);
+  } catch {
+    /* ignore */
+  }
+  try {
+    fs.unlinkSync(LOCK_PATH);
+  } catch {
+    /* ignore */
+  }
 }
 
 /**

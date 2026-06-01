@@ -13,9 +13,13 @@ import {
 } from "./parse";
 import { listInstances, findInstance } from "./registry";
 import { sendRequest, snapshot, write, PipeError, Client, withClient } from "./client";
-import { ASK_SETTLE_MS } from "./config";
+import { ASK_SETTLE_MS, SUBMIT_DELAY_MS } from "./config";
 import { waitIdle, waitFor } from "./wait";
 import { KEYS } from "./keys";
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 function unescape(s: string): string {
   return s
@@ -58,12 +62,14 @@ function parseArgs(argv: string[]): ParsedArgs {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
     if (a === "--pipe") out.pipeFlag = requireValue("--pipe", argv[++i]);
-    else if (a.startsWith("--pipe=")) out.pipeFlag = requireValue("--pipe", a.slice("--pipe=".length));
+    else if (a.startsWith("--pipe="))
+      out.pipeFlag = requireValue("--pipe", a.slice("--pipe=".length));
     else if (a === "--json") out.json = true;
     else if (a === "--file") out.file = requireValue("--file", argv[++i]);
     else if (a.startsWith("--file=")) out.file = requireValue("--file", a.slice("--file=".length));
     else if (a === "--timeout") out.timeoutMs = parseTimeoutSeconds("--timeout", argv[++i]);
-    else if (a.startsWith("--timeout=")) out.timeoutMs = parseTimeoutSeconds("--timeout", a.slice("--timeout=".length));
+    else if (a.startsWith("--timeout="))
+      out.timeoutMs = parseTimeoutSeconds("--timeout", a.slice("--timeout=".length));
     else out.positional.push(a);
   }
   return out;
@@ -79,7 +85,9 @@ function resolvePipe(explicit?: string): string {
   const live = listInstances();
   if (live.length === 1) return live[0]!.pipe;
   if (live.length > 1) {
-    const names = live.map((e) => `  ${e.label ?? "?"}  ${e.pipe}  (pid ${e.pid}, ${e.cwd})`).join("\n");
+    const names = live
+      .map((e) => `  ${e.label ?? "?"}  ${e.pipe}  (pid ${e.pid}, ${e.cwd})`)
+      .join("\n");
     throw new Error(
       `multiple claude-wrap instances running; pick one with --pipe <name|label> or set CLAUDE_WRAP_PIPE:\n${names}`,
     );
@@ -159,7 +167,9 @@ async function run(args: ParsedArgs): Promise<number> {
     }
     case "key": {
       const k = rest[0];
-      if (!k || !(k in KEYS)) throw new Error(`unknown key: ${k}`);
+      if (!k || !(k in KEYS)) {
+        throw new Error(`unknown key: ${k ?? "<missing>"}. Valid keys: ${Object.keys(KEYS).join(", ")}`);
+      }
       const pipe = resolvePipe(args.pipeFlag);
       await write(pipe, KEYS[k]!);
       return 0;
@@ -178,7 +188,8 @@ async function run(args: ParsedArgs): Promise<number> {
     case "resize": {
       const c = Number(rest[0]);
       const r = Number(rest[1]);
-      if (!Number.isFinite(c) || !Number.isFinite(r)) throw new Error("resize requires numeric cols rows");
+      if (!Number.isFinite(c) || !Number.isFinite(r))
+        throw new Error("resize requires numeric cols rows");
       const pipe = resolvePipe(args.pipeFlag);
       const res = await sendRequest(pipe, { cmd: "resize", cols: c, rows: r });
       if ("error" in res) throw new PipeError(res.error);
@@ -225,7 +236,11 @@ async function run(args: ParsedArgs): Promise<number> {
         // the opposite choice — that would turn a deny into an approve.
         const chosen =
           cmd === "approve" ? perm.options[0]! : perm.options[perm.options.length - 1]!;
-        await client.write(chosen.key + "\r");
+        // Send the digit, then Enter as a separate write after a short gap so
+        // the selection commits before confirm (see SUBMIT_DELAY_MS).
+        await client.write(chosen.key);
+        await sleep(SUBMIT_DELAY_MS);
+        await client.write("\r");
         console.error(`${cmd}: pressed option ${chosen.key}. ${chosen.label}`);
       });
       return 0;
@@ -250,7 +265,12 @@ async function run(args: ParsedArgs): Promise<number> {
       const text = rest.join(" ");
       if (!text) throw new Error("ask requires prompt text");
       await withClient(resolvePipe(args.pipeFlag), async (client) => {
-        await client.write(text + "\r");
+        // Type the text, then submit with a separate Enter after a short gap
+        // so the TUI commits the text before Enter fires (avoids the
+        // "typed but never submitted" race). See SUBMIT_DELAY_MS.
+        await client.write(text);
+        await sleep(SUBMIT_DELAY_MS);
+        await client.write("\r");
         // Give the TUI a moment to register the input before we start polling.
         await new Promise((r) => setTimeout(r, ASK_SETTLE_MS));
         const opts = args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {};
@@ -337,7 +357,11 @@ async function run(args: ParsedArgs): Promise<number> {
       if (!hit) throw new Error(`no live instance matches: ${sel}`);
       // Spawn a new cmd.exe window with CLAUDE_WRAP_PIPE pre-set.
       const title = `Shell [${hit.label ?? hit.pipe}]`;
-      const env = { ...process.env, CLAUDE_WRAP_PIPE: hit.pipe, CLAUDE_WRAP_LABEL: hit.label ?? "" };
+      const env = {
+        ...process.env,
+        CLAUDE_WRAP_PIPE: hit.pipe,
+        CLAUDE_WRAP_LABEL: hit.label ?? "",
+      };
       child_process
         .spawn("cmd.exe", ["/c", "start", `"${title}"`, "cmd", "/k"], {
           cwd: hit.cwd,

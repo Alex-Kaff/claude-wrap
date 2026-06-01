@@ -16,3 +16,6 @@ tsconfig.tsbuildinfo
 .DS_Store
 Thumbs.db
 *.stackdump
+
+# Agent working notes (never committed)
+.agent-scratch/

@@ -14,10 +14,7 @@ import {
 export interface ControlHandlers {
   onWrite(bytes: Buffer): void;
   /** Handlers return the core fields; dispatch stamps the protocol version. */
-  onSnapshot(
-    viewportOnly: boolean,
-    clean: boolean,
-  ): Omit<SnapshotResponse, "version">;
+  onSnapshot(viewportOnly: boolean, clean: boolean): Omit<SnapshotResponse, "version">;
   onResize(cols: number, rows: number): void;
 }
 
@@ -77,7 +74,10 @@ export function dispatchRequest(handlers: ControlHandlers, msg: Request): Respon
 export class ControlServer {
   private server: net.Server;
 
-  constructor(private readonly pipePath: string, private readonly handlers: ControlHandlers) {
+  constructor(
+    private readonly pipePath: string,
+    private readonly handlers: ControlHandlers,
+  ) {
     this.server = net.createServer((sock) => this.onConnection(sock));
     this.server.on("error", (err) => log("[control] server error", err));
   }
@@ -87,7 +87,11 @@ export class ControlServer {
       // On Unix the "pipe" is actually a socket file; remove any stale
       // leftover from a previous crashed run so bind doesn't fail.
       if (process.platform !== "win32") {
-        try { fs.unlinkSync(this.pipePath); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(this.pipePath);
+        } catch {
+          /* ignore */
+        }
       }
       this.server.once("error", reject);
       this.server.listen(this.pipePath, () => {
@@ -105,7 +109,11 @@ export class ControlServer {
       /* ignore */
     }
     if (process.platform !== "win32") {
-      try { fs.unlinkSync(this.pipePath); } catch { /* ignore */ }
+      try {
+        fs.unlinkSync(this.pipePath);
+      } catch {
+        /* ignore */
+      }
     }
   }
 

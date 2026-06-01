@@ -18,9 +18,13 @@ import type { SessionState } from "./session-state";
 import type { ScreenSnapshot } from "./screen";
 import { createEmitter, type TypedEmitter, type SessionEvents } from "./events";
 import { TimeoutError } from "./errors";
-import { WAIT_IDLE_TIMEOUT_MS, ASK_SETTLE_TIMEOUT_MS } from "./config";
+import { WAIT_IDLE_TIMEOUT_MS, ASK_SETTLE_TIMEOUT_MS, SUBMIT_DELAY_MS } from "./config";
 import type { PermissionPrompt } from "./parse";
 import { KEYS } from "./keys";
+
+function delay(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
 import { quoteCmdArg } from "./cmd-quote";
 
 // ---------------------------------------------------------------------------
@@ -131,7 +135,10 @@ export class ClaudeInstance {
     for (const arg of rawCliArgs) {
       // If an arg contains newlines or is very long, it's a prompt — write to temp file
       if (arg.includes("\n") || arg.length > 500) {
-        const tmpFile = path.join(os.tmpdir(), `claude-wrap-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`);
+        const tmpFile = path.join(
+          os.tmpdir(),
+          `claude-wrap-prompt-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`,
+        );
         fs.writeFileSync(tmpFile, arg, "utf8");
         promptFiles.push(tmpFile);
         wrapArgs.push("--prompt-file", tmpFile);
@@ -168,7 +175,11 @@ export class ClaudeInstance {
     if (promptFiles.length > 0) {
       setTimeout(() => {
         for (const f of promptFiles) {
-          try { fs.unlinkSync(f); } catch { /* already deleted by wrapper or missing */ }
+          try {
+            fs.unlinkSync(f);
+          } catch {
+            /* already deleted by wrapper or missing */
+          }
         }
       }, 30_000);
     }
@@ -177,12 +188,8 @@ export class ClaudeInstance {
   /** Spawn claude headlessly via node-pty (original behavior). */
   private spawnHeadless(opts: SpawnOptions, cwd: string, cols: number, rows: number): void {
     const isWindows = process.platform === "win32";
-    const spawnFile = isWindows
-      ? (process.env["ComSpec"] ?? "cmd.exe")
-      : "claude";
-    const spawnArgs = isWindows
-      ? ["/c", "claude", ...(opts.args ?? [])]
-      : [...(opts.args ?? [])];
+    const spawnFile = isWindows ? (process.env["ComSpec"] ?? "cmd.exe") : "claude";
+    const spawnArgs = isWindows ? ["/c", "claude", ...(opts.args ?? [])] : [...(opts.args ?? [])];
 
     this.child = pty.spawn(spawnFile, spawnArgs, {
       name: "xterm-256color",
@@ -196,14 +203,22 @@ export class ClaudeInstance {
     // PTY data -> screen (+ optional passthrough + raw onData listeners)
     this.child.onData((data) => {
       if (opts.passthrough) {
-        try { process.stdout.write(data); } catch { /* ignore */ }
+        try {
+          process.stdout.write(data);
+        } catch {
+          /* ignore */
+        }
       }
       this.screen.write(data);
       // Fan out the raw chunk to onData() subscribers. Iterate a copy so a
       // listener that unsubscribes mid-emit doesn't disturb iteration.
       if (this.dataListeners.size > 0) {
         for (const cb of [...this.dataListeners]) {
-          try { cb(data); } catch { /* listener errors are non-fatal */ }
+          try {
+            cb(data);
+          } catch {
+            /* listener errors are non-fatal */
+          }
         }
       }
     });
@@ -220,7 +235,10 @@ export class ClaudeInstance {
 
     // Process exit — emit before cleanup so the event sink can forward the exit message
     this.child.onExit(({ exitCode }) => {
-      if (this.parser) { this.parser.flush(); this.parser.dispose(); }
+      if (this.parser) {
+        this.parser.flush();
+        this.parser.dispose();
+      }
       this.emitter.emit("process:exit", {
         instance: this.id,
         exitCode: exitCode ?? null,
@@ -242,27 +260,37 @@ export class ClaudeInstance {
       if (opts.enablePipe) {
         const pipePth = pipePath(this.pipeName);
         this.control = new ControlServer(pipePth, handlers);
-        this.control.listen().catch(() => { /* best effort */ });
+        this.control.listen().catch(() => {
+          /* best effort */
+        });
       }
 
       if (opts.enableHttp) {
         this.http = new HttpBridge(handlers, { pid: this.pid, pipe: this.pipeName });
-        this.http.listen(0).then((info) => {
-          // If the instance was torn down before listen() resolved, don't
-          // register a ghost entry pointing at a closing bridge.
-          if (!this._alive) { this.http?.close(); return; }
-          registerInstance({
-            pipe: this.pipeName,
-            pid: this.pid,
-            cwd,
-            title: "Claude (managed)",
-            label: this.label,
-            httpPort: info.port,
-            startedAt: new Date().toISOString(),
+        this.http
+          .listen(0)
+          .then((info) => {
+            // If the instance was torn down before listen() resolved, don't
+            // register a ghost entry pointing at a closing bridge.
+            if (!this._alive) {
+              this.http?.close();
+              return;
+            }
+            registerInstance({
+              pipe: this.pipeName,
+              pid: this.pid,
+              cwd,
+              title: "Claude (managed)",
+              label: this.label,
+              httpPort: info.port,
+              startedAt: new Date().toISOString(),
+            });
+            this._httpPort = info.port;
+            for (const s of this.sinks) s.setHttpPort?.(info.port);
+          })
+          .catch(() => {
+            /* best effort */
           });
-          this._httpPort = info.port;
-          for (const s of this.sinks) s.setHttpPort?.(info.port);
-        }).catch(() => { /* best effort */ });
       } else if (opts.enablePipe) {
         registerInstance({
           pipe: this.pipeName,
@@ -300,9 +328,15 @@ export class ClaudeInstance {
     if (!this.parser) throw new Error("state not available in windowed mode");
     return this.parser.current;
   }
-  get alive(): boolean { return this._alive; }
-  get pid(): number { return this.child?.pid ?? this.windowPid ?? 0; }
-  get isWindowed(): boolean { return this.child === null; }
+  get alive(): boolean {
+    return this._alive;
+  }
+  get pid(): number {
+    return this.child?.pid ?? this.windowPid ?? 0;
+  }
+  get isWindowed(): boolean {
+    return this.child === null;
+  }
 
   // --- Input ---
 
@@ -314,30 +348,55 @@ export class ClaudeInstance {
 
   sendKey(name: string): void {
     const seq = KEYS[name];
-    if (!seq) throw new Error(`unknown key: ${name}`);
+    if (!seq) {
+      throw new Error(`unknown key: ${name}. Valid keys: ${Object.keys(KEYS).join(", ")}`);
+    }
     this.send(seq);
   }
 
+  /**
+   * Type text and submit it with Enter. The text and the Enter are sent as
+   * separate PTY writes with a short gap (SUBMIT_DELAY_MS) so the TUI commits
+   * the typed text before Enter fires — sending them together lets Enter race
+   * ahead and the line is typed but never submitted.
+   */
   sendLine(text: string): void {
-    this.send(text + "\r");
+    if (!this._alive || !this.child) return;
+    this.send(text);
+    setTimeout(() => {
+      if (this._alive) this.send("\r");
+    }, SUBMIT_DELAY_MS);
   }
 
   // --- High-level actions ---
 
-  approve(): void {
-    const perm = this.state.permissionPrompt;
-    if (!perm || perm.options.length === 0) {
-      throw new Error("no permission prompt on screen");
-    }
-    this.send(perm.options[0]!.key + "\r");
+  /**
+   * Choose a numbered option in the on-screen prompt. Sends the option's
+   * digit, then (after a gap) Enter, as separate writes. Pressing the digit
+   * highlights/activates the option; the follow-up Enter confirms it if the
+   * digit alone didn't, and is a harmless no-op on an empty input box if it
+   * did. Async so callers can await the keystrokes landing.
+   */
+  private async chooseOption(key: string): Promise<void> {
+    this.send(key);
+    await delay(SUBMIT_DELAY_MS);
+    if (this._alive) this.send("\r");
   }
 
-  deny(): void {
+  async approve(): Promise<void> {
     const perm = this.state.permissionPrompt;
     if (!perm || perm.options.length === 0) {
       throw new Error("no permission prompt on screen");
     }
-    this.send(perm.options[perm.options.length - 1]!.key + "\r");
+    await this.chooseOption(perm.options[0]!.key);
+  }
+
+  async deny(): Promise<void> {
+    const perm = this.state.permissionPrompt;
+    if (!perm || perm.options.length === 0) {
+      throw new Error("no permission prompt on screen");
+    }
+    await this.chooseOption(perm.options[perm.options.length - 1]!.key);
   }
 
   /**
@@ -349,16 +408,33 @@ export class ClaudeInstance {
    * Throws TimeoutError if Claude never starts processing within
    * ASK_SETTLE_TIMEOUT_MS and `strict` is true (default false).
    */
-  async ask(text: string, opts?: {
-    timeoutMs?: number;
-    /** If true, throw when Claude never becomes busy after sending. Default false. */
-    strict?: boolean;
-  }): Promise<Readonly<SessionState>> {
-    this.sendLine(text);
-    const becameBusy = await this.waitBusy({ timeoutMs: ASK_SETTLE_TIMEOUT_MS });
+  async ask(
+    text: string,
+    opts?: {
+      timeoutMs?: number;
+      /** If true, throw when Claude never becomes busy after sending. Default false. */
+      strict?: boolean;
+    },
+  ): Promise<Readonly<SessionState>> {
+    // Type the prompt, then submit with a separate Enter after a short gap so
+    // the TUI has committed the text (see sendLine). If Claude doesn't start
+    // working, the Enter likely raced — retry it once before giving up. This
+    // removes the "typed but never submitted" flakiness.
+    this.send(text);
+    await delay(SUBMIT_DELAY_MS);
+    if (this._alive) this.send("\r");
+
+    let becameBusy = await this.waitBusy({ timeoutMs: ASK_SETTLE_TIMEOUT_MS });
+    if (!becameBusy && this._alive && this.state.permissionPrompt === null) {
+      // Retry the submit once — the first Enter may have fired before the
+      // text committed, or before the input box was focused.
+      this.send("\r");
+      becameBusy = await this.waitBusy({ timeoutMs: ASK_SETTLE_TIMEOUT_MS });
+    }
+
     if (!becameBusy && opts?.strict) {
       throw new TimeoutError(
-        `ask: Claude did not start processing within ${ASK_SETTLE_TIMEOUT_MS}ms`,
+        `ask: Claude did not start processing within ${2 * ASK_SETTLE_TIMEOUT_MS}ms`,
       );
     }
     if (becameBusy) {
@@ -472,7 +548,13 @@ export class ClaudeInstance {
   }
 
   resize(cols: number, rows: number): void {
-    if (this.child) { try { this.child.resize(cols, rows); } catch { /* ignore */ } }
+    if (this.child) {
+      try {
+        this.child.resize(cols, rows);
+      } catch {
+        /* ignore */
+      }
+    }
     this.screen.resize(cols, rows);
     if (this.parser) this.parser.flush();
   }
@@ -499,7 +581,9 @@ export class ClaudeInstance {
    */
   onData(cb: (data: string) => void): () => void {
     this.dataListeners.add(cb);
-    return () => { this.dataListeners.delete(cb); };
+    return () => {
+      this.dataListeners.delete(cb);
+    };
   }
 
   // --- Lifecycle ---
@@ -515,7 +599,11 @@ export class ClaudeInstance {
       this.http = null;
     }
     for (const s of this.sinks) {
-      try { s.close(); } catch { /* ignore */ }
+      try {
+        s.close();
+      } catch {
+        /* ignore */
+      }
     }
     this.sinks = [];
     if (this.unsubScreenChanged) {
@@ -523,7 +611,11 @@ export class ClaudeInstance {
       this.unsubScreenChanged = null;
     }
     this.dataListeners.clear();
-    try { unregisterInstance(this.pipeName); } catch { /* ignore */ }
+    try {
+      unregisterInstance(this.pipeName);
+    } catch {
+      /* ignore */
+    }
     this._alive = false;
   }
 
@@ -535,11 +627,25 @@ export class ClaudeInstance {
     }
     this.cleanup();
     if (this.child) {
-      try { this.child.kill(); } catch { /* ignore */ }
+      try {
+        this.child.kill();
+      } catch {
+        /* ignore */
+      }
     } else if (this.windowPid) {
       // Windowed mode: kill the cmd.exe process tree
-      try { process.kill(this.windowPid); } catch { /* ignore */ }
-      try { cpSpawn("taskkill", ["/F", "/T", "/PID", String(this.windowPid)], { stdio: "ignore" }).unref(); } catch { /* ignore */ }
+      try {
+        process.kill(this.windowPid);
+      } catch {
+        /* ignore */
+      }
+      try {
+        cpSpawn("taskkill", ["/F", "/T", "/PID", String(this.windowPid)], {
+          stdio: "ignore",
+        }).unref();
+      } catch {
+        /* ignore */
+      }
     }
   }
 

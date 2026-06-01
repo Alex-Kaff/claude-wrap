@@ -13,7 +13,9 @@ function tick(ms = 20) {
 test("onChange fires after write() and snapshot reflects content", async () => {
   const screen = new VirtualScreen(80, 24);
   let changes = 0;
-  screen.onChange(() => { changes++; });
+  screen.onChange(() => {
+    changes++;
+  });
 
   screen.write("hello world\r\n");
   await tick();
@@ -29,7 +31,9 @@ test("onChange fires after write() and snapshot reflects content", async () => {
 test("onChange unsubscribe stops further callbacks", async () => {
   const screen = new VirtualScreen(80, 24);
   let changes = 0;
-  const unsub = screen.onChange(() => { changes++; });
+  const unsub = screen.onChange(() => {
+    changes++;
+  });
 
   screen.write("first\r\n");
   await tick();
@@ -63,9 +67,14 @@ test("snapshot clean=true trims trailing whitespace and blank rows", async () =>
 
 test("multiple onChange listeners all fire", async () => {
   const screen = new VirtualScreen(80, 24);
-  let a = 0, b = 0;
-  screen.onChange(() => { a++; });
-  screen.onChange(() => { b++; });
+  let a = 0,
+    b = 0;
+  screen.onChange(() => {
+    a++;
+  });
+  screen.onChange(() => {
+    b++;
+  });
 
   screen.write("x\r\n");
   await tick();

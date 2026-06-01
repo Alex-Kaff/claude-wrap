@@ -9,7 +9,7 @@ import { TimeoutError } from "../dist/errors.js";
 // lines[] from the queue (or repeats the last one if exhausted).
 class FakeClient {
   constructor(frames) {
-    this.frames = frames.map((lines) => Array.isArray(lines) ? lines : [lines]);
+    this.frames = frames.map((lines) => (Array.isArray(lines) ? lines : [lines]));
     this.cursor = 0;
     this.writes = [];
     this.closed = false;
@@ -27,19 +27,16 @@ class FakeClient {
       lines: this.frames[i],
     };
   }
-  async write(data) { this.writes.push(data); }
-  close() { this.closed = true; }
+  async write(data) {
+    this.writes.push(data);
+  }
+  close() {
+    this.closed = true;
+  }
 }
 
-const BUSY = [
-  "✢ Tempering…",
-  "❯ what is 2+2",
-  "  ⏵⏵ accept edits on · 123 tokens",
-];
-const IDLE = [
-  "❯ ",
-  "  ⏵⏵ accept edits on · 123 tokens",
-];
+const BUSY = ["✢ Tempering…", "❯ what is 2+2", "  ⏵⏵ accept edits on · 123 tokens"];
+const IDLE = ["❯ ", "  ⏵⏵ accept edits on · 123 tokens"];
 const PERMISSION = [
   " Bash command",
   " mkdir foo",

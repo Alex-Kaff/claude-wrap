@@ -43,8 +43,7 @@ export class HttpBridge {
       this.server.listen(port, "127.0.0.1", () => {
         this.server.removeListener("error", reject);
         const addr = this.server.address();
-        const chosen =
-          typeof addr === "object" && addr ? addr.port : Number(port);
+        const chosen = typeof addr === "object" && addr ? addr.port : Number(port);
         this.info = { port: chosen, host: "127.0.0.1" };
         log(`[http] listening at http://127.0.0.1:${chosen}`);
         resolve(this.info);
@@ -53,7 +52,11 @@ export class HttpBridge {
   }
 
   close(): void {
-    try { this.server.close(); } catch { /* ignore */ }
+    try {
+      this.server.close();
+    } catch {
+      /* ignore */
+    }
   }
 
   // -------------------------------------------------------------------------

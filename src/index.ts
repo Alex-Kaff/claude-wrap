@@ -62,6 +62,7 @@ export {
   WAIT_FOR_TIMEOUT_MS,
   PARSE_DEBOUNCE_MS,
   ASK_SETTLE_TIMEOUT_MS,
+  SUBMIT_DELAY_MS,
 } from "./config";
 
 // Wait helpers (for out-of-process polling)

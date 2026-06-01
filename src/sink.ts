@@ -257,7 +257,11 @@ export class WebSocketEventSink implements EventSink {
       this.idleDebounce = null;
     }
     if (this.ws) {
-      try { this.ws.close(); } catch { /* ignore */ }
+      try {
+        this.ws.close();
+      } catch {
+        /* ignore */
+      }
       this.ws = null;
     }
   }

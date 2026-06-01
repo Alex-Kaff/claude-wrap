@@ -38,26 +38,38 @@ export interface PermissionOption {
 }
 
 export interface PermissionPrompt {
-  /** Line index of the "Do you want to proceed?" row. */
+  /** Line index of the question / first option row. */
   index: number;
-  /** e.g. "Bash command", "Write", "Edit". May be empty if we couldn't find a header. */
+  /** Box header, e.g. "Bash command", "Create file", "Edit file", "Fetch",
+   *  "Trust folder". May be empty if we couldn't find a header. */
   title: string;
-  /** Free-form body lines between the header and the question. */
+  /** The question being asked, e.g. "Do you want to create note.txt?".
+   *  Empty for prompts whose phrasing we don't recognize. */
+  question: string;
+  /** Free-form body lines between the header and the question (command text,
+   *  diff, fetch target, …) with box-drawing separators stripped. */
   body: string[];
   options: PermissionOption[];
 }
 
 export interface StatusLine {
   index: number;
-  /** "accept edits on", "plan mode", "normal", or whatever mode string was seen. */
+  /** "auto mode on", "accept edits on", "plan mode on", "normal", or null.
+   *  Normal/default mode has no phrase on the bar; we report it as "normal". */
   mode: string | null;
-  /** True if a spinner glyph is currently on screen (assistant is working). */
+  /** True while the assistant is actively working. Driven by the
+   *  "esc to interrupt" hint in the bottom status bar (reliable across
+   *  Claude Code versions), with a live "thinking" spinner line as a
+   *  fallback when no bar is on screen. */
   busy: boolean;
   /** Token count if shown in the status bar. */
   tokens: number | null;
-  /** Raw text of the matched row, trimmed. */
+  /** Reasoning-effort level shown bottom-right ("◉ xhigh · /effort"), or null. */
+  effort: string | null;
+  /** Raw text of the matched status-bar row, trimmed. */
   raw: string;
-  /** The spinner line content (if busy), used to detect stale spinners. */
+  /** The live "thinking" spinner line (e.g. "Kneading… (6s · …)") if present.
+   *  Diagnostic only; busy no longer depends on animated spinner glyphs. */
   spinnerLine?: string | undefined;
 }
 
@@ -97,8 +109,17 @@ const TODO_GLYPHS: Record<string, TodoStatus> = {
   "◉": "in_progress",
 };
 
-// Characters the TUI uses as animated progress indicators.
-const SPINNER_GLYPHS = new Set(["✢", "✻", "✶", "✽", "◐", "◑", "◒", "◓", "⠋", "⠙", "⠹", "⠸"]);
+// Remote-control session URL surfaced on boot when /remote-control is active.
+const REMOTE_URL_RE = /https:\/\/claude\.ai\/code\/session_[A-Za-z0-9]+/;
+
+/** Extract the remote-control session URL if Claude Code printed one. */
+export function parseRemoteUrl(lines: string[]): string | null {
+  for (const line of lines) {
+    const m = REMOTE_URL_RE.exec(line);
+    if (m) return m[0];
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------------
 // Todo list
@@ -223,119 +244,238 @@ export function parseToolCalls(lines: string[]): ToolCall[] {
 // Permission prompt
 // ---------------------------------------------------------------------------
 
-const PERMISSION_Q_RE = /^do you want to proceed\??$/i;
-const PERMISSION_OPTION_RE = /^(?:❯\s*)?(\d+)\.\s+(.+)$/;
+// A permission/confirmation option row: "❯ 1. Yes", "2. No", "3. ...".
+// The selection cursor "❯" (when present) marks the highlighted option.
+const PERMISSION_OPTION_RE = /^(?:❯\s*)?(\d+)[.)]\s+(.+)$/;
+
+// The question that opens a tool/file permission prompt. Wording varies by
+// action ("Do you want to proceed?", "Do you want to create note.txt?",
+// "Do you want to allow Claude to fetch this content?", "Do you want to make
+// this edit to …?"), so we match the stable "Do you want to" stem anywhere.
+const PERMISSION_QUESTION_RE = /\bdo you want to\b/i;
+
+// Startup "trust this folder" safety dialog (a different shape: no box, the
+// question is wrapped across lines). Detected by its options / phrasing.
+const TRUST_OPTION_RE = /\btrust this folder\b/i;
+const TRUST_QUESTION_RE = /you created or one you trust/i;
+const TRUST_QUESTION = "Is this a project you created or one you trust?";
+
+// The box top border is a solid horizontal rule; diff/content separators
+// inside the box are drawn with dashed box-drawing glyphs. We stop the
+// title/body backscan at the solid rule and drop the dashed separators.
+function isSolidRule(s: string): boolean {
+  return /^─{10,}$/.test(s);
+}
+function isBoxSeparator(s: string): boolean {
+  return /^[╌╍┄┅┈┉╶╴‐-]{4,}$/.test(s);
+}
+
+interface OptionRun {
+  /** Index of the first option row. */
+  start: number;
+  options: PermissionOption[];
+}
+
+/** Find every run of consecutive numbered option rows on screen. */
+function findOptionRuns(lines: string[]): OptionRun[] {
+  const runs: OptionRun[] = [];
+  for (let i = 0; i < lines.length; ) {
+    const m = PERMISSION_OPTION_RE.exec((lines[i] ?? "").trimStart());
+    if (!m) {
+      i++;
+      continue;
+    }
+    const start = i;
+    const options: PermissionOption[] = [];
+    let j = i;
+    for (; j < lines.length; j++) {
+      const row = (lines[j] ?? "").trimStart();
+      const mj = PERMISSION_OPTION_RE.exec(row);
+      if (!mj) break;
+      options.push({ key: mj[1]!, label: cutRightUI(mj[2]!.trim()), selected: row.startsWith("❯") });
+    }
+    runs.push({ start, options });
+    i = j + 1;
+  }
+  return runs;
+}
 
 /**
- * Detect the "Do you want to proceed?" permission box. Returns the last
- * one on screen or null if not present.
+ * Detect an interactive prompt that is waiting on the user: tool/file
+ * permission boxes ("Do you want to …?"), the startup trust dialog, and any
+ * other numbered yes/no menu Claude Code puts up. Anchored on the option menu
+ * (≥2 numbered rows with a "❯" selection cursor) so it survives prompt-wording
+ * changes between Claude Code releases. Returns the last (active) one or null.
  */
 export function parsePermissionPrompt(lines: string[]): PermissionPrompt | null {
-  let found: PermissionPrompt | null = null;
+  // A real prompt menu has a selection cursor; Claude's own numbered output
+  // (e.g. a markdown list in a reply) never does. That cursor is what keeps
+  // this from matching ordinary transcript text.
+  const runs = findOptionRuns(lines).filter(
+    (r) => r.options.length >= 2 && r.options.some((o) => o.selected),
+  );
+  if (runs.length === 0) return null;
+  const run = runs[runs.length - 1]!;
 
-  for (let i = 0; i < lines.length; i++) {
-    const q = lines[i]?.trim() ?? "";
-    if (!PERMISSION_Q_RE.test(q)) continue;
-
-    // Walk forward collecting options.
-    const options: PermissionOption[] = [];
-    for (let j = i + 1; j < lines.length; j++) {
-      const rowFull = lines[j] ?? "";
-      const row = rowFull.trimStart();
-      if (row === "") {
-        if (options.length > 0) break;
-        continue;
-      }
-      const selected = row.startsWith("❯");
-      const m = PERMISSION_OPTION_RE.exec(row);
-      if (!m) {
-        if (options.length > 0) break;
-        continue;
-      }
-      options.push({ key: m[1]!, label: cutRightUI(m[2]!.trim()), selected });
+  // Nearest non-empty line above the option menu.
+  let qIdx = -1;
+  for (let k = run.start - 1; k >= 0; k--) {
+    if ((lines[k] ?? "").trim() !== "") {
+      qIdx = k;
+      break;
     }
+  }
+  const qLine = qIdx >= 0 ? (lines[qIdx] ?? "").trim() : "";
 
-    // Walk backward for the title ("<Tool> command") and body lines.
-    // Stop at a `●` tool bullet or `❯` user prompt so we don't scoop in
-    // unrelated earlier content.
-    let title = "";
-    const bodyRev: string[] = [];
-    for (let k = i - 1; k >= 0; k--) {
-      const row = (lines[k] ?? "").trim();
-      if (row === "") continue;
-      if (row.startsWith("●") || row.startsWith("❯")) break;
-      if (/ command$/i.test(row)) {
-        title = row;
-        break;
-      }
-      bodyRev.push(cutRightUI(row));
-      if (bodyRev.length > 20) break;
-    }
-    const body = bodyRev.reverse();
-
-    found = { index: i, title, body, options };
+  // --- Startup "trust this folder" dialog -------------------------------
+  if (
+    !PERMISSION_QUESTION_RE.test(qLine) &&
+    (run.options.some((o) => TRUST_OPTION_RE.test(o.label)) ||
+      lines.some((l) => TRUST_QUESTION_RE.test(l)))
+  ) {
+    return {
+      index: run.start,
+      title: "Trust folder",
+      question: TRUST_QUESTION,
+      body: [],
+      options: run.options,
+    };
   }
 
-  return found;
+  // --- Tool / file permission box (and generic numbered prompts) --------
+  const isQuestion = PERMISSION_QUESTION_RE.test(qLine);
+  // Backscan for the box header: collect non-empty content rows up to the
+  // solid top rule; the topmost collected row is the title ("Create file",
+  // "Bash command", "Fetch", …), the rest is the body. When the line above
+  // the options isn't a recognizable question we fold it into the body.
+  const collected: string[] = [];
+  const scanFrom = isQuestion ? qIdx : run.start;
+  for (let k = scanFrom - 1; k >= 0; k--) {
+    const row = (lines[k] ?? "").trim();
+    if (row === "") continue;
+    if (isSolidRule(row)) break;
+    if (row.startsWith("●") || row.startsWith("❯")) break;
+    if (isBoxSeparator(row)) continue;
+    collected.push(cutRightUI(row));
+    if (collected.length > 30) break;
+  }
+  let title = "";
+  let body: string[] = [];
+  if (collected.length > 0) {
+    title = collected[collected.length - 1]!;
+    body = collected.slice(0, -1).reverse();
+  }
+
+  return {
+    index: qIdx >= 0 ? qIdx : run.start,
+    title,
+    question: isQuestion ? qLine : "",
+    body,
+    options: run.options,
+  };
 }
 
 // ---------------------------------------------------------------------------
 // Status line
 // ---------------------------------------------------------------------------
 
-const MODE_RE = /(accept edits on|plan mode on|auto-accept on|normal mode)/i;
-const TOKENS_RE = /(\d[\d,]*)\s+tokens/;
+// Mode phrases shown at the left of the bottom status bar. Normal/default
+// mode shows no phrase (just "? for shortcuts"), so it's matched separately.
+const MODE_RE = /\b(auto mode on|accept edits on|plan mode on|bypass(?:ing)? permissions(?: on)?|auto-accept on)\b/i;
+const TOKENS_RE = /(\d[\d,]*)\s+tokens\b/;
+// Normal/default mode hint (no explicit mode phrase on the bar).
+const NORMAL_HINT_RE = /\?\s+for\s+shortcuts/i;
+// Present in the bottom bar only while Claude is working — the reliable,
+// version-stable busy signal (idle shows "← for agents" instead).
+const INTERRUPT_RE = /\besc to interrupt\b/i;
+// Reasoning-effort indicator, rendered bottom-right: "◉ xhigh · /effort".
+const EFFORT_RE = /[◉●]\s*([A-Za-z]+)\s*·\s*\/effort/;
+// A live "thinking"/working spinner line: "Kneading… (6s · ↓ 143 tokens · …)".
+// The trailing "(Ns" distinguishes it from a static completion line such as
+// "✻ Baked for 27s", which carries no parenthetical timer.
+const WORKING_RE = /…\s*\(\d+\s*s\b/;
+
+/** True if `line` looks like the bottom status bar (vs. transcript content). */
+function looksLikeStatusBar(line: string): boolean {
+  return (
+    TOKENS_RE.test(line) ||
+    MODE_RE.test(line) ||
+    NORMAL_HINT_RE.test(line) ||
+    INTERRUPT_RE.test(line)
+  );
+}
 
 /**
- * Parse the bottom status row plus detect whether a spinner glyph is
- * currently visible (i.e. the assistant is working). Busy detection is
- * limited to the window immediately above the status bar so that stale
- * spinner rows from earlier in the scrollback don't report as busy.
+ * Parse the bottom status bar: mode, token count, reasoning effort, and
+ * whether Claude is busy. Busy is keyed off the "esc to interrupt" hint in
+ * the bar (stable across Claude Code versions) rather than animated spinner
+ * glyphs — the glyphs vary per frame ("*", "·", "✶", "✻") and a finished
+ * "✻ Baked for 27s" line stays on screen, so glyph matching gave false
+ * positives. A live "thinking" spinner line is used only as a fallback when
+ * no status bar is on screen (e.g. mid-boot).
  */
 export function parseStatusLine(lines: string[]): StatusLine {
-  let bar: StatusLine | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
+  // Find the live bottom bar: the lowest status-bar-looking line that isn't
+  // the working spinner (which also mentions "tokens"). The effort line
+  // ("◉ xhigh · /effort") renders below the bar but matches none of the bar
+  // signatures, so it's naturally skipped.
+  let barIdx = -1;
+  let bar = "";
+  for (let i = lines.length - 1; i >= 0; i--) {
     const raw = (lines[i] ?? "").trim();
     if (raw === "") continue;
-    const modeMatch = MODE_RE.exec(raw);
-    if (modeMatch) {
-      const tokensMatch = TOKENS_RE.exec(raw);
-      bar = {
-        index: i,
-        mode: modeMatch[1]!.toLowerCase(),
-        busy: false,
-        tokens: tokensMatch ? Number(tokensMatch[1]!.replace(/,/g, "")) : null,
-        raw,
-      };
-    }
-  }
-
-  // Busy window: the last BUSY_WINDOW_LINES non-empty lines of the
-  // snapshot tail. Anchoring to the actual tail (rather than to
-  // bar.index) avoids a subtle bug when multiple status-bar-like rows
-  // exist in scrollback and `bar` points to the wrong one.
-  let tailEnd = lines.length;
-  while (tailEnd > 0 && (lines[tailEnd - 1] ?? "").trim() === "") tailEnd--;
-  const tailStart = Math.max(0, tailEnd - BUSY_WINDOW_LINES);
-  // Scan tail for spinner glyphs indicating Claude is actively working.
-  let busy = false;
-  let spinnerLine: string | undefined;
-  for (let i = tailStart; i < tailEnd; i++) {
-    const row = (lines[i] ?? "").trim();
-    if (row === "") continue;
-    const glyph = row[0] ?? "";
-    if (SPINNER_GLYPHS.has(glyph)) {
-      busy = true;
-      spinnerLine = row;
+    if (WORKING_RE.test(raw)) continue; // thinking line, not the bar
+    if (looksLikeStatusBar(raw)) {
+      barIdx = i;
+      bar = raw;
       break;
     }
   }
 
-  if (bar) {
-    bar.busy = busy;
-    bar.spinnerLine = spinnerLine;
-    return bar;
+  // Reasoning effort (scan the tail; it sits at/just below the bar).
+  let effort: string | null = null;
+  {
+    let end = lines.length;
+    while (end > 0 && (lines[end - 1] ?? "").trim() === "") end--;
+    const start = Math.max(0, end - BUSY_WINDOW_LINES);
+    for (let i = end - 1; i >= start; i--) {
+      const m = EFFORT_RE.exec((lines[i] ?? "").trim());
+      if (m) {
+        effort = m[1]!.toLowerCase();
+        break;
+      }
+    }
   }
-  return { index: -1, mode: null, busy, tokens: null, raw: "", spinnerLine };
+
+  // Live thinking/working spinner line (diagnostic + busy fallback).
+  let spinnerLine: string | undefined;
+  {
+    let end = lines.length;
+    while (end > 0 && (lines[end - 1] ?? "").trim() === "") end--;
+    const start = Math.max(0, end - BUSY_WINDOW_LINES);
+    for (let i = end - 1; i >= start; i--) {
+      const raw = (lines[i] ?? "").trim();
+      if (WORKING_RE.test(raw)) {
+        spinnerLine = raw;
+        break;
+      }
+    }
+  }
+
+  let mode: string | null = null;
+  let tokens: number | null = null;
+  let busy = false;
+  if (barIdx >= 0) {
+    const mm = MODE_RE.exec(bar);
+    if (mm) mode = mm[1]!.toLowerCase();
+    else if (NORMAL_HINT_RE.test(bar)) mode = "normal";
+    const tm = TOKENS_RE.exec(bar);
+    if (tm) tokens = Number(tm[1]!.replace(/,/g, ""));
+    busy = INTERRUPT_RE.test(bar);
+  } else if (spinnerLine) {
+    // No bar on screen but a live spinner is — treat as busy.
+    busy = true;
+  }
+
+  return { index: barIdx, mode, busy, tokens, effort, raw: bar, spinnerLine };
 }
