@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-06-05
+
+### Fixed
+- **Headful windows no longer render Unicode as mojibake / `?`.** The wrapper
+  mirrors the child PTY's UTF-8 output to its own stdout, which in a `start`-
+  spawned `cmd` window goes out the byte path. With the default OEM code page
+  (e.g. 437) the console mis-decodes those bytes, so the banner blocks, `❯`,
+  `⏵`, `…`, etc. came out as garbage or `?`. The wrapper now sets the console to
+  UTF-8 (`chcp 65001`) at startup. The `chcp` child is spawned with
+  `windowsHide:false` so it inherits — and therefore reconfigures — the visible
+  console, instead of getting its own detached one (verified: the window's
+  console output CP becomes 65001).
+
 ## [0.1.2] - 2026-06-05
 
 Repairs spawned/headful sessions against Claude Code v2.1.165. Backward
@@ -47,6 +60,7 @@ Initial release — client library for spawning and driving the Claude Code CLI
 status events, sending input, and controlling out-of-process instances over a
 pipe or loopback HTTP.
 
+[0.1.3]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/Alex-Kaff/claude-wrap/releases/tag/v0.1.0

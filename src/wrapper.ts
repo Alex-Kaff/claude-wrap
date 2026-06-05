@@ -4,6 +4,7 @@
 
 import * as pty from "node-pty";
 import * as fs from "fs";
+import { execSync } from "child_process";
 import { StringDecoder } from "string_decoder";
 import { VirtualScreen } from "./screen";
 import { ControlServer, type ControlHandlers } from "./control";
@@ -19,7 +20,31 @@ import { childEnv } from "./child-env";
 /** Ctrl+] — quits the wrapper without disturbing Ctrl+C passthrough to claude. */
 const QUIT_BYTE = 0x1d;
 
+/**
+ * Put the visible Windows console into UTF-8 (code page 65001).
+ *
+ * The wrapper mirrors the child PTY's UTF-8 output to its own stdout, and in a
+ * `start`-spawned cmd window that goes out the byte path (not the Unicode
+ * console API). With the default OEM code page (e.g. 437) the console then
+ * mis-decodes those bytes, so the banner blocks, `❯`, `⏵`, `…` etc. render as
+ * mojibake or `?`. `chcp 65001` runs in — and so reconfigures — this same
+ * shared console. Best-effort and Windows-only.
+ */
+function setConsoleUtf8(): void {
+  if (process.platform !== "win32") return;
+  try {
+    // windowsHide:false is essential: Node otherwise launches the child with
+    // CREATE_NO_WINDOW, giving it its own detached console, so `chcp` would set
+    // *that* code page and never touch our visible console. Inheriting the
+    // parent console lets chcp reconfigure the window we actually render to.
+    execSync("chcp 65001 >nul", { stdio: "ignore", windowsHide: false });
+  } catch {
+    /* best effort — older shells without chcp, or a redirected console */
+  }
+}
+
 function main(): void {
+  setConsoleUtf8();
   // Parse wrapper-specific flags (consumed here, not passed to claude)
   const rawArgs = process.argv.slice(2);
   let reportToArg: string | undefined;
