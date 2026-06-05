@@ -1,6 +1,6 @@
 {
   "name": "claude-wrap",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Client library for wrapping the Claude Code CLI window: spawn it headless or in a visible terminal, read screen/parsed state, subscribe to status events, send input, and control out-of-process instances over a pipe or loopback HTTP.",
   "license": "MIT",
   "author": "Alex Kaffetzakis <alex@kaffetzakis.com>",
@@ -26,7 +26,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist"

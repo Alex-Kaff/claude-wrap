@@ -18,6 +18,7 @@ import type { SessionState } from "./session-state";
 import type { ScreenSnapshot } from "./screen";
 import { createEmitter, type TypedEmitter, type SessionEvents } from "./events";
 import { TimeoutError } from "./errors";
+import { childEnv } from "./child-env";
 import { WAIT_IDLE_TIMEOUT_MS, ASK_SETTLE_TIMEOUT_MS, SUBMIT_DELAY_MS } from "./config";
 import type { PermissionPrompt } from "./parse";
 import { KEYS } from "./keys";
@@ -152,12 +153,13 @@ export class ClaudeInstance {
     const cmdLine = `${quoteCmdArg(nodeBin)} ${quoteCmdArg(wrapperJs)} ${wrapArgs.map(quoteCmdArg).join(" ")}`;
     const title = this.label || "Claude (workflow)";
 
-    const env = {
-      ...process.env,
+    // Strip the parent's Claude Code / IDE-integration env so the windowed
+    // child doesn't hijack the launching agent's IDE connection or session.
+    const env = childEnv({
       CLAUDE_WRAP_PIPE: this.pipeName,
       CLAUDE_WRAP_LABEL: this.label,
       CLAUDE_WRAP_ID: this.id,
-    };
+    });
 
     const proc = cpSpawn("cmd.exe", ["/c", "start", `"${title}"`, "cmd", "/k", cmdLine], {
       cwd,
@@ -196,7 +198,9 @@ export class ClaudeInstance {
       cols,
       rows,
       cwd,
-      env: { ...process.env, TERM: "xterm-256color", FORCE_COLOR: "3" },
+      // childEnv strips the parent's Claude Code / IDE-integration vars so a
+      // headless child doesn't auto-connect to the launching agent's IDE.
+      env: childEnv({ TERM: "xterm-256color", FORCE_COLOR: "3" }) as Record<string, string>,
       ...(isWindows ? { useConpty: true } : {}),
     });
 

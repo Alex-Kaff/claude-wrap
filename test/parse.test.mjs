@@ -146,6 +146,19 @@ test("v2159 permission: Write / create file", () => {
   assert.ok(p.body.includes("note.txt"));
 });
 
+test("v2165 permission: Write inside an IDE terminal (diff header is not the title)", () => {
+  // When attached to a VS Code / Cursor terminal, Write/Edit prompts grow an
+  // editor-diff header ("Opened changes in Cursor ⧉" / "Save file to continue…")
+  // in place of the usual "Create file" title. The question stays reliable and
+  // the IDE-noise lines must NOT leak into the title.
+  const p = parsePermissionPrompt(load("v2165_perm_write_ide.txt"));
+  assert.ok(p, "IDE-wrapped Write prompt must be detected");
+  assert.equal(p.question, "Do you want to create test-perm.txt?");
+  assert.equal(p.options.length, 3);
+  assert.ok(!/opened changes in|save file to continue/i.test(p.title), `title must not be IDE noise, got: ${p.title}`);
+  assert.ok(!p.body.some((b) => /opened changes in|save file to continue/i.test(b)), "IDE noise stripped from body");
+});
+
 test("v2159 permission: Edit / make this edit", () => {
   const p = parsePermissionPrompt(load("v2159_perm_edit.txt"));
   assert.ok(p, "Edit prompt must be detected");

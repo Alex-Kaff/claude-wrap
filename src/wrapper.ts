@@ -14,6 +14,7 @@ import { registerInstance, unregisterInstance, makePipeName } from "./registry";
 import { WebSocketEventSink } from "./sink";
 import { ContinuousParser } from "./session-state";
 import { createEmitter, type SessionEvents } from "./events";
+import { childEnv } from "./child-env";
 
 /** Ctrl+] — quits the wrapper without disturbing Ctrl+C passthrough to claude. */
 const QUIT_BYTE = 0x1d;
@@ -72,7 +73,11 @@ function main(): void {
     cols,
     rows,
     cwd: process.cwd(),
-    env: { ...process.env, TERM: "xterm-256color", FORCE_COLOR: "3" },
+    // Strip the parent's Claude Code / IDE-integration env (childEnv) so a
+    // wrapped child doesn't auto-connect to the launching agent's IDE. Matters
+    // when the wrapper is run standalone (the `claude-wrap-run` bin), where
+    // process.env hasn't already been cleaned by the launcher.
+    env: childEnv({ TERM: "xterm-256color", FORCE_COLOR: "3" }) as Record<string, string>,
     useConpty: true,
   });
   log(`[wrap] spawned pid=${child.pid} ${shell} ${args.join(" ")}`);

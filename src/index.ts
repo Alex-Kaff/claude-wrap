@@ -16,6 +16,11 @@ export {
   type TodoStatus,
   type UserPrompt,
   type StatusLine,
+  // Pure line-parsers, for deriving state from a `snapshot()` over the pipe
+  // (out-of-process consumers that only have rendered lines, not the PTY byte
+  // stream a ContinuousParser needs).
+  parseStatusLine,
+  parsePermissionPrompt,
 } from "./parse";
 
 // Events
@@ -67,3 +72,6 @@ export {
 
 // Wait helpers (for out-of-process polling)
 export { waitIdle, waitFor } from "./wait";
+
+// Child environment hygiene (strip parent Claude Code / IDE-integration vars)
+export { childEnv } from "./child-env";

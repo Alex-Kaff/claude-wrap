@@ -270,6 +270,18 @@ function isBoxSeparator(s: string): boolean {
   return /^[╌╍┄┅┈┉╶╴‐-]{4,}$/.test(s);
 }
 
+// IDE-integration noise. When a session is attached to a VS Code / Cursor
+// terminal, a Write/Edit permission grows an editor-diff header
+// ("Opened changes in Cursor ⧉", "Save file to continue…") in place of the
+// usual "Create file"/"Edit file" box title. These lines are not part of the
+// permission's title/body — drop them from the backscan so the real title
+// (or, failing that, the filename) is what surfaces instead of "Opened
+// changes in Cursor". (Spawned sessions strip the IDE env via childEnv, so
+// this only matters for externally-attached windows.)
+function isIdeNoise(s: string): boolean {
+  return /^opened changes in /i.test(s) || /^save file to continue/i.test(s);
+}
+
 interface OptionRun {
   /** Index of the first option row. */
   start: number;
@@ -356,6 +368,7 @@ export function parsePermissionPrompt(lines: string[]): PermissionPrompt | null 
     if (isSolidRule(row)) break;
     if (row.startsWith("●") || row.startsWith("❯")) break;
     if (isBoxSeparator(row)) continue;
+    if (isIdeNoise(row)) continue;
     collected.push(cutRightUI(row));
     if (collected.length > 30) break;
   }
