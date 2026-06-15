@@ -13,8 +13,11 @@ import {
 
 export interface ControlHandlers {
   onWrite(bytes: Buffer): void;
-  /** Handlers return the core fields; dispatch stamps the protocol version. */
-  onSnapshot(viewportOnly: boolean, clean: boolean): Omit<SnapshotResponse, "version">;
+  /**
+   * Handlers return the core fields; dispatch stamps the protocol version.
+   * `colors` (opt-in) asks the handler to also include per-row color runs.
+   */
+  onSnapshot(viewportOnly: boolean, clean: boolean, colors: boolean): Omit<SnapshotResponse, "version">;
   onResize(cols: number, rows: number): void;
 }
 
@@ -47,7 +50,11 @@ export function dispatchRequest(handlers: ControlHandlers, msg: Request): Respon
       return res;
     }
     case "snapshot": {
-      const core = handlers.onSnapshot(msg.viewport === true, msg.clean === true);
+      const core = handlers.onSnapshot(
+        msg.viewport === true,
+        msg.clean === true,
+        msg.colors === true,
+      );
       return { version: PROTOCOL_VERSION, ...core };
     }
     case "resize": {

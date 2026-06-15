@@ -30,7 +30,20 @@ export interface SnapshotRequest extends VersionField {
   viewport?: boolean;
   /** If true, rtrim each line and drop trailing blank rows. */
   clean?: boolean;
+  /**
+   * Opt-in: also return per-row foreground color runs (see SnapshotResponse.colors).
+   * Omitted/false => the response carries no `colors` field (byte-for-byte the old
+   * shape), so old callers are unaffected and old servers simply ignore the flag.
+   */
+  colors?: boolean;
 }
+
+/**
+ * One foreground color run on a row: [length-in-codepoints, packed 0xRRGGBB fg, or
+ * -1 for the terminal default]. `length` counts codepoints (a surrogate pair is 1),
+ * matching the per-codepoint walk a renderer uses over the row text.
+ */
+export type ColorRun = [number, number];
 
 export interface ResizeRequest extends VersionField {
   cmd: "resize";
@@ -54,6 +67,14 @@ export interface SnapshotResponse {
   viewportY: number;
   baseY: number;
   lines: string[];
+  /**
+   * Optional per-row foreground color runs. Present only when the request set
+   * `colors:true` AND at least one row has non-default color. Index-aligned with
+   * `lines`: each entry is that row's runs (covering its codepoints) or null for an
+   * all-default row. Absent entirely => the caller renders monochrome (so a client
+   * talking to an older, color-unaware server degrades cleanly).
+   */
+  colors?: (ColorRun[] | null)[];
 }
 
 export interface ResizeResponse {

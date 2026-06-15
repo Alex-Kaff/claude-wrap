@@ -142,7 +142,7 @@ function main(): void {
   // Shared handlers used by both the named-pipe and HTTP transports.
   const handlers: ControlHandlers = {
     onWrite: (bytes) => child.write(injectDecoder.write(bytes)),
-    onSnapshot: (viewportOnly, clean) => screen.snapshot(viewportOnly, clean),
+    onSnapshot: (viewportOnly, clean, colors) => screen.snapshot(viewportOnly, clean, colors),
     onResize: (c, r) => {
       cols = c;
       rows = r;

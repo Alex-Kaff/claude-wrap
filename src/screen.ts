@@ -1,6 +1,7 @@
 import { Terminal } from "@xterm/headless";
 import { SCROLLBACK_LINES } from "./config";
-import type { SnapshotResponse } from "./protocol";
+import type { ColorRun, SnapshotResponse } from "./protocol";
+import { buildLineRuns, cpCount } from "./color";
 
 /** Core snapshot fields — wire `version` is stamped by dispatchRequest. */
 export type ScreenSnapshot = Omit<SnapshotResponse, "version">;
@@ -43,7 +44,7 @@ export class VirtualScreen {
     this.term.resize(cols, rows);
   }
 
-  snapshot(viewportOnly: boolean, clean = false): ScreenSnapshot {
+  snapshot(viewportOnly: boolean, clean = false, colors = false): ScreenSnapshot {
     const buf = this.term.buffer.active;
     const cols = this.term.cols;
     const rows = this.term.rows;
@@ -64,7 +65,7 @@ export class VirtualScreen {
       while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
     }
 
-    return {
+    const snap: ScreenSnapshot = {
       cols,
       rows,
       cursor: { x: buf.cursorX, y: buf.cursorY },
@@ -72,5 +73,23 @@ export class VirtualScreen {
       baseY: buf.baseY,
       lines,
     };
+
+    // Opt-in per-row foreground color runs, index-aligned with `lines` (clean only
+    // trims/pops, never reindexes, so `lines[i]` still maps to buffer row start+i).
+    // Read the live cell colors off each line and pack compact runs; an all-default
+    // row is null. Omit the field entirely when nothing is colored so a monochrome
+    // screen ships the exact old shape and the caller's fallback path is unchanged.
+    if (colors) {
+      const runs: (ColorRun[] | null)[] = [];
+      let any = false;
+      for (let i = 0; i < lines.length; i++) {
+        const r = buildLineRuns(buf.getLine(start + i), cols, cpCount(lines[i] ?? ""));
+        runs.push(r);
+        if (r) any = true;
+      }
+      if (any) snap.colors = runs;
+    }
+
+    return snap;
   }
 }

@@ -35,6 +35,12 @@ export {
 // Screen
 export { VirtualScreen, type ScreenSnapshot } from "./screen";
 
+// Terminal color extraction — per-cell foreground → compact [len, fg] runs. The
+// canonical packer behind VirtualScreen.snapshot({ colors:true }); exported so
+// consumers can render or re-derive runs from a snapshot's `colors` field.
+export { type ColorRun } from "./protocol";
+export { XTERM_PALETTE, cellFg, cpCount, buildLineRuns } from "./color";
+
 // Event sinks (out-of-process event forwarding)
 export {
   type EventSink,

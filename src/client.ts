@@ -28,7 +28,12 @@ export { PipeError, ProtocolVersionError } from "./errors";
 
 /** Minimal client surface used by wait.ts and high-level inject commands. */
 export interface IClient {
-  snapshot(opts?: { viewport?: boolean; clean?: boolean }): Promise<SnapshotResponse>;
+  snapshot(opts?: {
+    viewport?: boolean;
+    clean?: boolean;
+    /** Opt-in: ask for per-row color runs (SnapshotResponse.colors). */
+    colors?: boolean;
+  }): Promise<SnapshotResponse>;
   write(data: string): Promise<void>;
   close(): void;
 }
@@ -148,11 +153,14 @@ export class Client implements IClient {
     });
   }
 
-  async snapshot(opts: { viewport?: boolean; clean?: boolean } = {}): Promise<SnapshotResponse> {
+  async snapshot(
+    opts: { viewport?: boolean; clean?: boolean; colors?: boolean } = {},
+  ): Promise<SnapshotResponse> {
     const res = await this.send({
       cmd: "snapshot",
       viewport: opts.viewport === true,
       clean: opts.clean === true,
+      colors: opts.colors === true,
     });
     ensureCompatibleResponse(res);
     throwIfVersionMismatchError(res);

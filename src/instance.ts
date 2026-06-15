@@ -254,7 +254,8 @@ export class ClaudeInstance {
     if (opts.enablePipe || opts.enableHttp) {
       const handlers: ControlHandlers = {
         onWrite: (bytes) => this.child!.write(this.injectDecoder.write(bytes)),
-        onSnapshot: (viewportOnly, clean) => this.screen.snapshot(viewportOnly, clean),
+        onSnapshot: (viewportOnly, clean, colors) =>
+          this.screen.snapshot(viewportOnly, clean, colors),
         onResize: (c, r) => {
           this.child!.resize(c, r);
           this.screen.resize(c, r);
@@ -547,8 +548,8 @@ export class ClaudeInstance {
 
   // --- Screen ---
 
-  snapshot(opts?: { viewport?: boolean; clean?: boolean }): ScreenSnapshot {
-    return this.screen.snapshot(opts?.viewport ?? false, opts?.clean ?? false);
+  snapshot(opts?: { viewport?: boolean; clean?: boolean; colors?: boolean }): ScreenSnapshot {
+    return this.screen.snapshot(opts?.viewport ?? false, opts?.clean ?? false, opts?.colors ?? false);
   }
 
   resize(cols: number, rows: number): void {
