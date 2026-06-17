@@ -6,15 +6,22 @@
 [![node](https://img.shields.io/node/v/claude-wrap.svg)](https://nodejs.org)
 [![license](https://img.shields.io/npm/l/claude-wrap.svg)](./LICENSE)
 
-A client library for wrapping the **Claude Code** CLI window. Spawn `claude`
-headless (in an in-process PTY) or open a visible terminal window, mirror its
-output into a virtual screen, read parsed session state, subscribe to status
-changes, and send input — in-process or to out-of-process instances over a
-named pipe / loopback HTTP.
+A client library for driving the **Claude Code** CLI from your own code. It has
+two clients:
 
-> Windows-first. The headless PTY uses ConPTY; the windowed mode uses
-> `cmd.exe start`. Other platforms work headlessly via `node-pty`
-> (`openWindow` is ignored off Windows and falls back to headless).
+- **PTY client** (`ClaudeManager.spawn` / `ClaudeInstance`) — wraps the
+  interactive `claude` terminal: spawn it headless or in a visible window,
+  mirror its output into a virtual screen, read parsed state, subscribe to
+  status events, send input. Use it to watch or take over a real session.
+- **Print client** (`ClaudeManager.print` / `PrintSession`) — drives the
+  official headless JSON protocol (`claude -p`): clean, cheap, structured,
+  scriptable. Returns normalized turn results (text, structured output, tool
+  calls, usage, cost). On top of it sits an **OpenAI-compatible chat gateway**
+  (`ChatGateway` + the `claude-wrap-serve` HTTP server).
+
+> Windows-first. The PTY uses ConPTY (windowed mode uses `cmd.exe start`); the
+> print client spawns `claude` via `cmd /c` for a real stdin pipe. Other
+> platforms work headlessly (`openWindow` falls back to headless).
 
 ## Install
 
@@ -38,7 +45,7 @@ C/C++ toolchain:
 
 If `npm install` fails building `node-pty`, install the toolchain above and retry.
 
-## Quickstart — headless `ask()`
+## Quickstart — PTY client `ask()`
 
 ```ts
 import { ClaudeManager } from "claude-wrap";
@@ -76,33 +83,15 @@ All event names are in `ALL_SESSION_EVENTS`; payload types are keyed in
 
 ## Stream the display as it updates
 
-Two push APIs let you follow the terminal live instead of polling `snapshot()`.
-Both are **headless-only** (in windowed mode the PTY runs in the wrapper
-process, so neither fires).
-
-**Raw bytes — `onData(cb)`.** The truest live stream: every PTY output chunk,
-verbatim, including ANSI escape codes. Best for piping to your own terminal /
-xterm renderer.
+Two headless-only push APIs follow the terminal live instead of polling:
+`onData(cb)` delivers every raw PTY chunk (ANSI included) for a byte-for-byte
+mirror, while the `screen:changed` event signals a redraw so you can pull clean
+lines from `snapshot()`.
 
 ```ts
-const stop = instance.onData((chunk) => process.stdout.write(chunk));
-// …later: stop();  // unsubscribe
+const stop = instance.onData((chunk) => process.stdout.write(chunk)); // raw bytes
+instance.on("screen:changed", () => render(instance.snapshot({ clean: true }).lines));
 ```
-
-**Rendered lines — `screen:changed` + `snapshot()`.** Fires (undebounced) on
-every screen redraw and hands you a signal; pull the current clean lines in the
-handler. Best when you want parsed/renderable text rather than escape codes.
-(Unlike the debounced `state:changed`, this reflects cosmetic redraws too.)
-
-```ts
-instance.on("screen:changed", () => {
-  const { lines } = instance.snapshot({ clean: true });
-  render(lines);
-});
-```
-
-Pick `onData` for a faithful byte-for-byte mirror; pick `screen:changed` when
-you only need "the visible text changed, give me the new lines".
 
 ## Open a visible window (Windows)
 
@@ -131,32 +120,88 @@ if (entry) {
 
 ## Forward events out-of-process — `EventSink`
 
-When a wrapper runs in another process you can't call `.on()` on it. Attach an
-`EventSink` to forward its events over a transport. The built-in
-`WebSocketEventSink` ships a generic JSON wire format:
-
-```
-{ kind: "hello", instance, pid, cwd, label?, httpPort? }
-{ kind: "event", instance, event: <SessionEvents key>, payload }
-{ kind: "exit",  instance, exitCode }
-```
+When a wrapper runs in another process, attach an `EventSink` to forward its
+events over a transport. The built-in `WebSocketEventSink` ships a generic JSON
+wire format (`hello` / `event` / `exit` frames).
 
 ```ts
 import { ClaudeManager, WebSocketEventSink } from "claude-wrap";
 
 const manager = new ClaudeManager();
-manager.spawn({
-  cwd: process.cwd(),
-  reportTo: "ws://127.0.0.1:8080", // builds a WebSocketEventSink internally
-});
-
-// …or attach one explicitly:
-const inst = manager.spawn({ cwd: process.cwd() });
-inst.attachSink(new WebSocketEventSink("ws://127.0.0.1:8080", { idleDebounceMs: 2500 }));
+// `reportTo` builds the sink internally; or call inst.attachSink(...) explicitly.
+manager.spawn({ cwd: process.cwd(), reportTo: "ws://127.0.0.1:8080" });
 ```
 
-The wrapper binary reads the same URL from the `--report-to` flag or the
+The wrapper binary reads the same URL from `--report-to` or the
 `CLAUDE_WRAP_REPORT_URL` environment variable.
+
+## Print client — structured `claude -p`
+
+`ClaudeManager.print()` (or `new PrintSession(...)`) drives Claude through the
+headless JSON protocol and returns a normalized `TurnResult` per turn — no
+screen scraping.
+
+```ts
+import { ClaudeManager } from "claude-wrap";
+
+const manager = new ClaudeManager();
+const session = manager.print({ cwd: process.cwd(), isolate: true });
+
+const r = await session.ask("Say hello in one word.");
+console.log(r.text, r.usage, r.costUsd);
+
+await session.shutdown();
+```
+
+- **Transports.** `persistent` (default) keeps one process alive for fast
+  multi-turn with a warm prompt cache; `oneshot` (`transport: "oneshot"`) spawns
+  a fresh process per turn. Memory carries across turns either way.
+- **`isolate: true`** runs the cheap clean profile (no host MCP servers, tools,
+  or plugins) — ~13× cheaper for plain chat.
+- **Structured output.** Pass `jsonSchema` (or `ask(text, { schema })` in
+  oneshot) and read `r.structuredOutput`.
+- **Resume.** `{ resume: "<claude-session-uuid>" }` continues a prior session
+  (cwd-scoped); the id is on `session.claudeSessionId` / `r.sessionId`.
+- **Permissions.** Supply `canUseTool(call)` to approve/deny each tool live, or
+  subscribe to the `permission:request` event. `session.interrupt()` cancels the
+  in-flight turn.
+- **In-process functions.** Pass `functions: [{ name, inputSchema, handler }]`
+  and Claude can call your JavaScript directly (hosted as an in-process MCP
+  server over the control protocol).
+
+## OpenAI-compatible chat gateway
+
+`ChatGateway` exposes an OpenAI-shaped client (isolated by default), and
+`claude-wrap-serve` puts an HTTP server in front of it — point any OpenAI SDK at
+`http://127.0.0.1:<port>/v1`.
+
+```ts
+import { ChatGateway } from "claude-wrap";
+
+const chat = new ChatGateway();
+const res = await chat.completions.create({
+  model: "claude-sonnet-4-6",
+  messages: [{ role: "user", content: "Describe rain in one line." }],
+});
+console.log(res.choices[0].message.content);
+```
+
+```sh
+claude-wrap-serve            # listens on 127.0.0.1:4000 by default
+# POST /v1/chat/completions (JSON or SSE), GET /v1/models, GET /health
+```
+
+Supports streaming (SSE), `response_format` (json schema / json object),
+`max_tokens`, client-side function calling (`tools` → `tool_calls`), and three
+history strategies — `replay` (stateless, default), `session` (pooled warm
+session via `X-Claude-Session-Id`), and `diff` (auto-resume on an exact prefix
+match). Errors use the OpenAI envelope.
+
+## MCP server
+
+[`claude-wrap-mcp`](../claude-wrap-mcp) exposes both clients to agents as MCP
+tools: `claude_*` drive PTY sessions, `claudep_*` drive print sessions
+(`claudep_spawn` / `claudep_ask` / `claudep_resume` / `claudep_resolve_permission` / …).
 
 ## Bins
 
@@ -165,6 +210,7 @@ The wrapper binary reads the same URL from the `--report-to` flag or the
 | `claude-wrap` | Launch a wrapped `claude` in a new terminal window |
 | `claude-wrap-run` | The wrapper process (PTY + pipe + HTTP bridge) |
 | `claude-wrap-inject` | CLI to snapshot/parse/drive a running instance over its pipe |
+| `claude-wrap-serve` | OpenAI-compatible HTTP chat gateway (`/v1/chat/completions`) |
 
 ## Logging
 

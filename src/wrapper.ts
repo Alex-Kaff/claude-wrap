@@ -32,6 +32,10 @@ const QUIT_BYTE = 0x1d;
  */
 function setConsoleUtf8(): void {
   if (process.platform !== "win32") return;
+  // Headless/detached wrappers (`claude-wrap new --headless`) run with stdio
+  // "ignore" and no attached console, so there's nothing to reconfigure — and
+  // `chcp` would spawn a transient conhost. Skip it unless we own a real TTY.
+  if (!process.stdout.isTTY) return;
   try {
     // windowsHide:false is essential: Node otherwise launches the child with
     // CREATE_NO_WINDOW, giving it its own detached console, so `chcp` would set
@@ -107,10 +111,17 @@ function main(): void {
   });
   log(`[wrap] spawned pid=${child.pid} ${shell} ${args.join(" ")}`);
 
-  // PTY -> real terminal + virtual screen
+  // PTY -> real terminal + virtual screen.
   child.onData((data) => {
-    process.stdout.write(data);
+    // Feed the virtual screen first — it's the pipe/snapshot truth source and
+    // must update even when there's no console. Mirror to stdout best-effort;
+    // a detached headless wrapper has stdio "ignore" and no TTY.
     screen.write(data);
+    try {
+      process.stdout.write(data);
+    } catch {
+      /* headless / closed stdout — the screen mirror above is what matters */
+    }
   });
 
   // Event emitter + parser (detects busy/idle/permission/tool/todo events)

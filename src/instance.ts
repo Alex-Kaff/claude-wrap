@@ -17,6 +17,7 @@ import { ContinuousParser } from "./session-state";
 import type { SessionState } from "./session-state";
 import type { ScreenSnapshot } from "./screen";
 import { createEmitter, type TypedEmitter, type SessionEvents } from "./events";
+import type { ManagedSession } from "./managed";
 import { TimeoutError } from "./errors";
 import { childEnv } from "./child-env";
 import { WAIT_IDLE_TIMEOUT_MS, ASK_SETTLE_TIMEOUT_MS, SUBMIT_DELAY_MS } from "./config";
@@ -69,9 +70,10 @@ export interface SpawnOptions {
 
 let instanceCounter = 0;
 
-export class ClaudeInstance {
+export class ClaudeInstance implements ManagedSession {
   readonly id: string;
   readonly label: string;
+  readonly kind = "pty" as const;
   readonly pipeName: string;
   readonly emitter: TypedEmitter<SessionEvents>;
 
@@ -336,6 +338,9 @@ export class ClaudeInstance {
   get alive(): boolean {
     return this._alive;
   }
+  get cwd(): string {
+    return this._cwd;
+  }
   get pid(): number {
     return this.child?.pid ?? this.windowPid ?? 0;
   }
@@ -571,6 +576,11 @@ export class ClaudeInstance {
     handler: (payload: SessionEvents[K]) => void,
   ): () => void {
     return this.emitter.on(event, handler);
+  }
+
+  /** Normalized exit subscription (ManagedSession). Returns an unsubscribe fn. */
+  onExit(handler: (code: number | null) => void): () => void {
+    return this.emitter.on("process:exit", ({ exitCode }) => handler(exitCode));
   }
 
   /**

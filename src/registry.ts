@@ -19,6 +19,13 @@ export interface InstanceEntry {
   label?: string;
   /** Loopback HTTP bridge port, if one is running for this instance. */
   httpPort?: number;
+  /**
+   * Session kind. Optional because legacy/foreign entries from other process
+   * versions won't carry it — readers default to "pty". PTY sessions own a
+   * unique child pid; print sessions register under a synthetic `print:<id>`
+   * pipe and share the owner process pid (so pid-based dedup must skip them).
+   */
+  kind?: "pty" | "print";
   startedAt: string;
 }
 
@@ -145,9 +152,15 @@ export function listInstances(): InstanceEntry[] {
 
 export function registerInstance(entry: InstanceEntry): void {
   withLock(() => {
+    const entryKind = entry.kind ?? "pty";
     const live = readRaw()
       .filter((e) => isAlive(e.pid))
-      .filter((e) => e.pipe !== entry.pipe && e.pid !== entry.pid);
+      // Always dedup by pipe (the unique key).
+      .filter((e) => e.pipe !== entry.pipe)
+      // Dedup by pid only among PTY entries: a restarted PTY child can reuse a
+      // pid, but many print sessions legitimately share the owner pid, so a
+      // pid clash there is NOT a stale-restart and must not evict siblings.
+      .filter((e) => !(e.pid === entry.pid && (e.kind ?? "pty") === "pty" && entryKind === "pty"));
     live.push(entry);
     writeRaw(live);
   });

@@ -1,6 +1,6 @@
 {
   "name": "claude-wrap",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Client library for wrapping the Claude Code CLI window: spawn it headless or in a visible terminal, read screen/parsed state, subscribe to status events, send input, and control out-of-process instances over a pipe or loopback HTTP.",
   "license": "MIT",
   "author": "Alex Kaffetzakis <alex@kaffetzakis.com>",
@@ -38,7 +38,8 @@
   "bin": {
     "claude-wrap": "./dist/launch.js",
     "claude-wrap-run": "./dist/wrapper.js",
-    "claude-wrap-inject": "./dist/inject.js"
+    "claude-wrap-inject": "./dist/inject.js",
+    "claude-wrap-serve": "./dist/chat/http-server.js"
   },
   "scripts": {
     "build": "tsc",
@@ -52,7 +53,8 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.mjs\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.mjs\"",
     "prepublishOnly": "npm run clean && npm run build && npm test",
-    "test": "tsc && node --test test/parse.test.mjs test/wait.test.mjs test/client.test.mjs test/session-state.test.mjs test/screen.test.mjs test/color.test.mjs"
+    "test": "tsc && node --test test/parse.test.mjs test/wait.test.mjs test/client.test.mjs test/session-state.test.mjs test/screen.test.mjs test/color.test.mjs test/print-args.test.mjs test/print-ndjson.test.mjs test/print-turn.test.mjs test/print-proto.test.mjs test/print-control.test.mjs test/print-mcp-bridge.test.mjs test/chat-map.test.mjs test/chat-http.test.mjs test/chat-diff.test.mjs",
+    "test:integration": "tsc && node --test test/print-integration.test.mjs test/chat-integration.test.mjs"
   },
   "dependencies": {
     "@xterm/headless": "^5.5.0",

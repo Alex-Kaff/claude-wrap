@@ -4,6 +4,78 @@
 export { ClaudeManager } from "./manager";
 export { ClaudeInstance, type SpawnOptions } from "./instance";
 
+// Shared lifecycle interface (PTY + print)
+export { type ManagedSession } from "./managed";
+
+// Print client (`claude -p` structured-protocol transport)
+export {
+  PrintSession,
+  type PrintSessionOptions,
+  type AskOptions,
+} from "./print/print-session";
+export {
+  buildArgs,
+  applyIsolation,
+  validateOptions,
+  type PrintOptions,
+  type McpConfig,
+  type Transport,
+  type PermissionMode,
+  type Effort,
+} from "./print/args";
+export {
+  TurnAccumulator,
+  collectTurn,
+  type TurnResult,
+  type ToolUse,
+  type NormalizedUsage,
+} from "./print/turn";
+export { NdjsonReader, parseJsonArray } from "./print/ndjson";
+export {
+  ALL_PRINT_EVENTS,
+  type PrintEvents,
+  type PrintEvent,
+} from "./print/print-events";
+export {
+  type CanUseTool,
+  type PermissionToolCall,
+  type PermissionResult,
+  type ControlState,
+} from "./print/control";
+export {
+  McpControlBridge,
+  type BridgedTool,
+  type BridgedToolResult,
+} from "./print/mcp-bridge";
+export {
+  TESTED_CLI_VERSIONS,
+  isTestedCliVersion,
+  asProtoMessage,
+  isInit,
+  isThinkingTokens,
+  isSystem,
+  isRateLimitEvent,
+  isAssistant,
+  isUser,
+  isStreamEvent,
+  isResult,
+  isControlRequest,
+  isControlResponse,
+  type ProtoMessage,
+  type InitMessage,
+  type ResultMessage,
+  type AssistantMessage,
+  type UserMessage,
+  type StreamEventMessage,
+  type RateLimitEventMessage,
+  type ContentBlock,
+  type ToolUseBlock,
+  type TextBlock,
+  type RawUsage,
+  type ModelUsage,
+  type RateLimitInfo,
+} from "./print/proto";
+
 // State & parsing
 export { type SessionState, emptyState } from "./session-state";
 export { ContinuousParser } from "./session-state";
@@ -60,7 +132,16 @@ export {
 } from "./registry";
 
 // Errors
-export { PipeError, TimeoutError, ParseError, ProtocolVersionError } from "./errors";
+export {
+  PipeError,
+  TimeoutError,
+  ParseError,
+  ProtocolVersionError,
+  MalformedStreamError,
+  ProcessExitError,
+  TurnTimeoutError,
+  NotSupportedError,
+} from "./errors";
 
 // Client (for talking to out-of-process wrappers)
 export { Client, type IClient, withClient, sendRequest } from "./client";
@@ -81,3 +162,34 @@ export { waitIdle, waitFor } from "./wait";
 
 // Child environment hygiene (strip parent Claude Code / IDE-integration vars)
 export { childEnv } from "./child-env";
+
+// Chat gateway (OpenAI-spec layer over the print transport)
+export { ChatGateway, GatewayError, type GatewayOptions } from "./chat/gateway";
+export { ChatHttpServer, type ChatHttpServerOptions } from "./chat/http-server";
+export {
+  mapRequest,
+  flattenReplay,
+  type MapRequestOptions,
+  type MappedRequest,
+} from "./chat/map-request";
+export { DiffHistory, hashPrefix, type DiffPlan } from "./chat/diff-history";
+export {
+  turnToCompletion,
+  usageFromTurn,
+  mapFinishReason,
+  messageContent,
+} from "./chat/map-response";
+export {
+  DEFAULT_MODEL,
+  ADVERTISED_MODELS,
+  type ChatCompletion,
+  type ChatCompletionChunk,
+  type ChatCompletionRequest,
+  type ChatMessage,
+  type ChatContentPart,
+  type ResponseFormat,
+  type FinishReason,
+  type Usage,
+  type ModelsList,
+  type OpenAiError,
+} from "./chat/openai-types";

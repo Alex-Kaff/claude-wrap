@@ -49,3 +49,53 @@ export class ProtocolVersionError extends Error {
     this.name = "ProtocolVersionError";
   }
 }
+
+// ---------------------------------------------------------------------------
+// Print-transport errors (`claude -p` structured-protocol client)
+// ---------------------------------------------------------------------------
+
+/**
+ * The print stdout stream ended (or the one-shot JSON array completed) without
+ * a `result` message for the in-flight turn. Carries any captured stderr to aid
+ * diagnosis.
+ */
+export class MalformedStreamError extends Error {
+  constructor(
+    message: string,
+    public readonly stderr: string = "",
+  ) {
+    super(message);
+    this.name = "MalformedStreamError";
+  }
+}
+
+/**
+ * The `claude` print process exited (non-zero, or before producing a `result`).
+ * Carries the exit code and captured stderr.
+ */
+export class ProcessExitError extends Error {
+  constructor(
+    message: string,
+    public readonly code: number | null,
+    public readonly stderr: string = "",
+  ) {
+    super(message);
+    this.name = "ProcessExitError";
+  }
+}
+
+/** A print turn did not produce its `result` within the configured timeout. */
+export class TurnTimeoutError extends TimeoutError {
+  constructor(message: string) {
+    super(message);
+    this.name = "TurnTimeoutError";
+  }
+}
+
+/** A requested capability isn't available yet (e.g. interrupt before the M4 control handshake). */
+export class NotSupportedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NotSupportedError";
+  }
+}

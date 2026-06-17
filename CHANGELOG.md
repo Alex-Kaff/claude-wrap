@@ -4,6 +4,39 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-06-17
+
+Adds a second way to drive Claude — the structured headless protocol — plus an
+OpenAI-compatible gateway and a verb-based CLI, alongside the existing PTY client.
+
+### Added
+- **Print client (`ClaudeManager.print()` / `PrintSession`).** Drives the
+  official headless JSON protocol (`claude -p`) over stdin/stdout instead of
+  screen-scraping — persistent (warm, multi-turn) and one-shot transports,
+  normalized `TurnResult` (text, structured output, tool calls, usage, cost),
+  `isolate` cheap-clean profile, structured output (`jsonSchema`), cross-process
+  `resume`, turn timeouts with resume-recovery, and an on-disk registry entry
+  (`kind:"print"`). Windows runs `claude` over `cmd /c` for a real stdin pipe.
+- **SDK control protocol.** Dynamic per-tool permissions via `canUseTool` + the
+  `permission:request` event, `interrupt()`, and in-process functions Claude can
+  call directly (`functions: [...]`, hosted as an SDK-MCP server over the control
+  channel).
+- **OpenAI-compatible chat gateway (`ChatGateway`) + `claude-wrap-serve` bin.**
+  An in-process OpenAI-shaped client and an HTTP server (`/v1/chat/completions`
+  JSON + SSE, `/v1/models`, `/health`). Isolated by default; supports
+  `response_format` (json schema / json object), `max_tokens` enforcement,
+  streaming with usage, client-side function calling (`tools` → `tool_calls`),
+  and `replay` / `session` / `diff` history strategies. OpenAI-shaped errors.
+- **Verb-based `claude-wrap` CLI** (`new` / `list` / `ask` / `status` / `send` /
+  `stop`) for managing instances from the shell, mirroring the MCP surface.
+- Opt-in per-row foreground colors in the snapshot protocol (carried over from
+  0.1.4).
+
+### Changed
+- **Breaking:** `ClaudeManager.get()` / `.list()` now return the shared
+  `ManagedSession` type (PTY + print) rather than `ClaudeInstance`. `spawn()`
+  still returns `ClaudeInstance`; the new `print()` returns `PrintSession`.
+
 ## [0.1.3] - 2026-06-05
 
 ### Fixed
@@ -60,6 +93,7 @@ Initial release — client library for spawning and driving the Claude Code CLI
 status events, sending input, and controlling out-of-process instances over a
 pipe or loopback HTTP.
 
+[0.2.0]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.4...v0.2.0
 [0.1.3]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Alex-Kaff/claude-wrap/compare/v0.1.0...v0.1.1
