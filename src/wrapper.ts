@@ -94,8 +94,14 @@ function main(): void {
 
   const screen = new VirtualScreen(cols, rows);
 
-  const shell = process.env["ComSpec"] ?? "cmd.exe";
-  const args = ["/c", "claude", ...claudeArgs];
+  // Windows runs claude under the command shell (cmd.exe /c claude …); every
+  // other platform spawns the `claude` binary directly (resolved via PATH by
+  // node-pty). Mirrors the branch in instance.ts — without it a headless
+  // `claude-wrap new` on Linux/macOS tries to exec a non-existent cmd.exe and
+  // the child immediately exits 1.
+  const isWindows = process.platform === "win32";
+  const shell = isWindows ? (process.env["ComSpec"] ?? "cmd.exe") : "claude";
+  const args = isWindows ? ["/c", "claude", ...claudeArgs] : [...claudeArgs];
 
   const child = pty.spawn(shell, args, {
     name: "xterm-256color",
@@ -107,7 +113,9 @@ function main(): void {
     // when the wrapper is run standalone (the `claude-wrap-run` bin), where
     // process.env hasn't already been cleaned by the launcher.
     env: childEnv({ TERM: "xterm-256color", FORCE_COLOR: "3" }) as Record<string, string>,
-    useConpty: true,
+    // ConPTY is a Windows-only backend; only pass the flag there (mirrors
+    // instance.ts). node-pty's Unix path ignores it, but keep it off to be explicit.
+    ...(isWindows ? { useConpty: true } : {}),
   });
   log(`[wrap] spawned pid=${child.pid} ${shell} ${args.join(" ")}`);
 

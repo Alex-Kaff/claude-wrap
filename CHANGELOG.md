@@ -4,6 +4,17 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-06-18
+
+### Fixed
+- **Headless launch on Linux/macOS.** `claude-wrap new --headless` (and the
+  standalone wrapper) hardcoded the Windows command shell (`cmd.exe /c claude`)
+  with no platform branch, so on non-Windows the child exec'd a non-existent
+  `cmd.exe` and immediately exited 1, never staying registered. The wrapper now
+  spawns `claude` directly off `PATH` everywhere except Windows, mirroring the
+  in-process `ClaudeInstance` path. `useConpty` (a Windows-only ConPTY flag) is
+  likewise gated to Windows.
+
 ## [0.2.0] - 2026-06-17
 
 Adds a second way to drive Claude — the structured headless protocol — plus an
