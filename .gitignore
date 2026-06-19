@@ -1,6 +1,11 @@
 # Dependencies
 node_modules/
 
+# npm lockfile is intentionally not committed: this package is developed inside a
+# pnpm workspace, so a local `npm install` writes a monorepo-relative (poisoned)
+# lock. See .npmrc (package-lock=false).
+package-lock.json
+
 # Build output
 dist/
 tsconfig.tsbuildinfo
